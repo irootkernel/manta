@@ -1,0 +1,14 @@
+ RUN  v1.6.0 /repo
+
+ ❯ src/foo.test.ts (1)
+   × renders empty state 8ms
+     → expected false to be true
+
+ FAIL  src/foo.test.ts > renders empty state
+ AssertionError: expected false to be true
+ ❯ src/foo.ts:42:13
+     40| export function render() {
+     41|   const ready = false
+     42|   expect(ready).toBe(true)
+       |             ^
+

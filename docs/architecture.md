@@ -1,0 +1,238 @@
+# KAT Architecture
+
+Status: Complete
+Scope: Standalone KAT v0.1 architecture
+
+## Architecture goals
+
+KAT is a deterministic test and log-evidence tool. It should run test commands, preserve raw output, extract bounded failure evidence, and produce compact artifacts that humans, GJC, KAS, KAH, or simple no-agent watchers can consume. For this repository setup, KAT must remain independent from KAS and KAH.
+
+## Implementation baseline
+
+- Implementation language: Go.
+- Packaging target: standalone single binary named `kkachi-agent-tester`.
+- Regex engine baseline: Go `regexp` (RE2 semantics) only.
+- Current supported parser labels: `generic`, `vitest`, `pytest`, `go-test`, and `playwright`.
+- Unknown parser labels fail closed.
+
+## Non-goals
+
+- KAT is not an autonomous test-writing agent.
+- KAT is not a KAS authority layer.
+- KAT is not a KAH state ledger.
+- KAT does not decide that a failed command passed.
+- KAT does not rely on terminal/tmux log streaming as a control plane.
+
+## Component overview
+
+```text
+CLI
+ ├─ Config Loader
+ ├─ Command Registry
+ ├─ Runner
+ │   ├─ Process Executor
+ │   ├─ Timeout Controller
+ │   └─ Raw Log Writer
+ ├─ Extraction Engine
+ │   ├─ Generic Parser
+ │   ├─ Parser Registry
+ │   ├─ Project Rules
+ │   ├─ Noise Filter
+ │   └─ Redactor
+ ├─ Artifact Writer
+ │   ├─ summary.json
+ │   ├─ summary.md
+ │   ├─ status.json
+ │   └─ excerpts/*.log
+ └─ Rule Manager
+     ├─ CRUD
+     ├─ Rule Test
+     └─ Rule Propose
+```
+
+## Data flow: configured command
+
+```text
+1. User runs `kkachi-agent-tester run unit`.
+2. CLI resolves repository root and config path.
+3. Config loader validates `.kkachi/tester.yaml`.
+4. Command registry resolves `unit` to command argv / lane / parser / timeout.
+5. Runner executes the command in the selected working directory.
+6. Raw stdout/stderr are captured and written to a raw log artifact.
+7. Extraction engine reads raw log and applies the selected parser plus project rules.
+8. Redactor and noise filters shape surfaced artifacts.
+9. Artifact writer writes summary JSON, summary Markdown, excerpts, and status JSON.
+10. CLI exits with the underlying test command status or a documented KAT internal error code.
+```
+
+## Data flow: summarize existing raw log
+
+```text
+1. User runs `kkachi-agent-tester summarize fixtures/unit.raw.log`.
+2. CLI resolves repository root, config path, and raw-log path.
+3. Config loader validates optional redaction/noise config and project rules.
+4. KAT infers `command_id` and `lane` from the raw-log basename when no execution metadata exists.
+5. Extraction engine reads the existing raw log and applies the `generic` parser plus matching project rules.
+6. Redactor and noise filters shape surfaced artifacts.
+7. Artifact writer writes summary JSON, summary Markdown, excerpts, and status JSON beside the raw log or into the selected output layout.
+8. CLI exits `0` when summarization succeeds because no test command was executed in this mode.
+```
+
+## Artifact layout
+
+When a run ID is supplied:
+
+```text
+.kkachi/runs/<run_id>/artifacts/test/<command-id>.raw.log
+.kkachi/runs/<run_id>/artifacts/test/<command-id>.summary.json
+.kkachi/runs/<run_id>/artifacts/test/<command-id>.summary.md
+.kkachi/runs/<run_id>/artifacts/test/<command-id>.status.json
+.kkachi/runs/<run_id>/artifacts/test/excerpts/<failure-id>.log
+```
+
+Standalone mode may write to:
+
+```text
+.kat/runs/<timestamp-or-run-id>/<command-id>.raw.log
+.kat/runs/<timestamp-or-run-id>/<command-id>.summary.json
+.kat/runs/<timestamp-or-run-id>/<command-id>.summary.md
+.kat/runs/<timestamp-or-run-id>/<command-id>.status.json
+.kat/runs/<timestamp-or-run-id>/excerpts/<failure-id>.log
+```
+
+Failure IDs such as `F001` are summary-local identifiers. Excerpt lookup is deterministic through summary context, not by assuming failure IDs are globally unique.
+
+## Config model
+
+Default config path:
+
+```text
+.kkachi/tester.yaml
+```
+
+Minimal shape:
+
+```yaml
+version: 1
+commands:
+  unit:
+    command:
+      - pnpm
+      - vitest
+      - run
+    lane: unit
+    parser: generic
+    timeout_sec: 600
+noise_filters:
+  - "Browserslist: caniuse-lite is outdated"
+redaction:
+  patterns:
+    - name: token
+      regex: "(?i)(token|api[_-]?key)=\\S+"
+      replace: "$1=<redacted>"
+```
+
+## Summary JSON contract
+
+The summary JSON should be stable enough for downstream tools while remaining implementation-friendly:
+
+```yaml
+status: failed | passed | timed_out | killed | internal_error
+command_id: unit
+lane: unit
+parser: generic
+command_argv:
+  - pnpm
+  - vitest
+  - run
+exit_code: 1
+duration_ms: 18422
+raw_log: .kat/runs/20260624T010203/unit.raw.log
+raw_log_sha256: sha256:...
+extractor_status: precise | partial | degraded | no_match
+failure_count: 2
+warning_count: 4
+failures:
+  - id: F001
+    kind: test_failure
+    signature: "TypeError: Cannot read properties of undefined"
+    file: src/foo.test.ts
+    line: 42
+    test_name: "renders empty state"
+    raw_span:
+      start_line: 1842
+      end_line: 1917
+      start_byte: 88211
+      end_byte: 92108
+    excerpt: .kat/runs/20260624T010203/excerpts/F001.log
+    stack_top:
+      - src/foo.ts:42
+      - src/foo.test.ts:19
+warnings:
+  - id: W001
+    signature: "deprecated API"
+    raw_span:
+      start_line: 712
+      end_line: 718
+```
+
+## Status JSON contract
+
+Status JSON is for no-agent polling and should be compact:
+
+```yaml
+status: failed | passed | timed_out | killed | internal_error
+command_id: unit
+lane: unit
+exit_code: 1
+extractor_status: precise | partial | degraded | no_match
+summary_path: .kat/runs/20260624T010203/unit.summary.json
+summary_sha256: sha256:...
+raw_log_path: .kat/runs/20260624T010203/unit.raw.log
+raw_log_sha256: sha256:...
+failure_signatures:
+  - sha256:...
+warning_signatures:
+  - sha256:...
+updated_at: 2026-06-24T01:02:03Z
+```
+
+### Watcher hash input set
+
+No-agent watchers should suppress duplicate notifications by hashing exactly this ordered field set:
+
+1. `command_id`
+2. `status`
+3. `exit_code`
+4. `extractor_status`
+5. `raw_log_sha256`
+6. `failure_signatures`
+7. `warning_signatures`
+8. `summary_path`
+9. `raw_log_path`
+
+Other fields may be present for convenience, but watcher compatibility is defined by the field set above.
+
+## Failure and degraded extraction policy
+
+Command execution status is authoritative. Parser quality only affects evidence quality.
+
+- `exit_code == 0` and no internal error: command passed.
+- `exit_code != 0`: command failed even if no parser matched a span.
+- Non-zero exit with no useful span should emit `status: failed` and `extractor_status: degraded`.
+- Parser or rule failure should never convert a failed command into pass.
+
+## Raw-log handling policy
+
+- Raw logs are preserved as original source evidence.
+- Raw logs are not redacted by default.
+- Summaries, excerpts, status JSON, and console-safe surfaced text do apply redaction.
+- Documentation and CLI output should warn that raw logs may contain unredacted secrets or sensitive values and should be shared cautiously.
+
+## Extension points
+
+- Project-local YAML extraction rules.
+- Parser registry entries for specialized runners.
+- Rule proposal from raw-log spans.
+- Optional Kkachi-compatible output layout when a run ID is supplied.
+- Future shared parser promotion after repeated cross-project evidence.

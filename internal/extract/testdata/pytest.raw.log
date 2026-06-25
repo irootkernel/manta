@@ -1,0 +1,4 @@
+============================= test session starts ==============================
+FAILED tests/test_app.py::test_empty_state - AssertionError: expected ready
+=========================== short test summary info ============================
+FAILED tests/test_app.py::test_empty_state - AssertionError: expected ready

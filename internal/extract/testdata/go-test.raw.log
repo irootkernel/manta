@@ -1,0 +1,5 @@
+--- FAIL: TestEmptyState (0.00s)
+    foo_test.go:42: expected ready to be true
+FAIL
+exit status 1
+FAIL	github.com/example/project/foo	0.123s

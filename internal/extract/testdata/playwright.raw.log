@@ -1,0 +1,5 @@
+1) [chromium] › tests/example.spec.ts:42:7 › renders empty state ─────────────
+
+  Error: expect(locator).toBeVisible() failed
+
+    at tests/example.spec.ts:42:7
