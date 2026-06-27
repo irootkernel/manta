@@ -83,6 +83,7 @@ Implementation note: the current v0.1 roadmap is implemented. The remaining futu
 - [x] `KAT-REQ-RQWAT-001` Produce deterministic status JSON that no-agent watchers can poll without invoking an LLM.
 - [x] `KAT-REQ-RQWAT-002` Define watcher compatibility around exactly these status-hash inputs: command ID, status, exit code, extractor status, raw-log checksum, failure signatures, warning signatures, summary path, and raw-log path.
 - [x] `KAT-REQ-RQWAT-003` Keep watcher-facing output compact and action-oriented.
+- [ ] `KAT-REQ-GAJAE-009` For GAJAE-009, either confirm KAH-side normalization can consume existing KAT v0.1.0 status/summary/raw-log artifacts without KAT source changes, or add an optional KAT-emitted bindable GAJAE evidence snapshot. Any snapshot must remain factual evidence only and must not include review, MAR, waiver, final, or acceptance claims.
 
 ## RQDOC: Documentation and operator guidance
 
@@ -94,7 +95,7 @@ Implementation note: the current v0.1 roadmap is implemented. The remaining futu
 ## Out of scope for v0.1 standalone setup
 
 - KAS command semantics or skill packaging.
-- KAH run-state ledger implementation.
+- KAH run-state ledger implementation, except that GAJAE-009 may add or document an optional KAH-bindable factual evidence snapshot if KAH-side normalization is not sufficient.
 - GJC session management.
 - Automatic issue tracker creation.
 - Any rule that changes command pass/fail status.

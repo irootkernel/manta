@@ -1,6 +1,6 @@
 # KAT Roadmap
 
-Status: Complete
+Status: v0.1 standalone MVP complete; GAJAE integration-contract tasks planned
 Scope: Implementation tracking for KAT v0.1 standalone MVP
 
 Task status values: `Planned`, `In Progress`, `Blocked`, `Done`, `Deferred`.
@@ -9,7 +9,7 @@ Current implementation snapshot:
 - `Done`: `SETUP-001` to `SETUP-003`, `RUNNR-001` to `RUNNR-003`, `ARTIF-001` to `ARTIF-003`, `PARSE-001` to `PARSE-003`, `SAFEY-001` to `SAFEY-003`, `CLIUX-001`, `CLIUX-002`, `RULES-001` to `RULES-003`, `DOCUM-001` to `DOCUM-003`
 - `In Progress`: none
 - `Deferred`: none
-- `Planned`: none
+- `Planned`: `GAJAE-009`, `GAJAE-010` integration-contract work only if the KAH adapter cannot normalize existing KAT v0.1.0 artifacts without KAT changes
 
 ## SETUP: Project foundation
 
@@ -73,3 +73,12 @@ Current implementation snapshot:
 | DOCUM-001 | Done | Create initial docs for requirements, architecture, user interface, ADRs, roadmap, todo, and implementation notes. | `KAT-REQ-RQDOC-001` |
 | DOCUM-002 | Done | Add real CLI examples, config examples, and artifact examples after first runnable implementation. | `KAT-REQ-RQDOC-002`, `TD-DOC-001` |
 | DOCUM-003 | Done | Add release-readiness checklist, fixture evidence expectations, and v0.1 packaging notes before tagging. | `KAT-REQ-RQDOC-004`, `TD-REL-001` |
+
+## GAJAE: KAS/KAH pilot-unblock integration contract
+
+KAT remains a standalone deterministic tester. These GAJAE entries document integration-contract work only; they do not move KAS command semantics, KAH run-state ledger behavior, GJC session management, or Kkachi acceptance authority into KAT.
+
+| Task ID | Status | Goal | Reference |
+|---|---|---|---|
+| GAJAE-009 | Planned | Support KAH attachment of KAT v0.1.0 factual evidence by either documenting the KAH-side normalization mapping as sufficient or, only if needed, adding a KAT-emitted bindable GAJAE evidence snapshot. Preserve command exit code, extractor status, summary/raw refs, and no-authority semantics. | `KAT-REQ-RQART-003`, `KAT-REQ-RQART-005`, `KAT-REQ-RQWAT-001`, `ADR-0001`, `ADR-0002` |
+| GAJAE-010 | Planned | Update KAT docs after GAJAE-009 settles the final attach contract, including whether raw KAT status remains unchanged with KAH normalization or KAT emits an additional compatibility artifact. | `KAT-REQ-RQDOC-001`, `KAT-REQ-RQDOC-002`, `KAT-REQ-RQWAT-002` |
