@@ -1,6 +1,6 @@
 # KAT Roadmap
 
-Status: v0.1 standalone MVP complete; GAJAE integration-contract tasks planned
+Status: v0.1 standalone MVP complete; GAJAE-009 integration-contract mapping documented; GAJAE-010 guidance follow-up planned
 Scope: Implementation tracking for KAT v0.1 standalone MVP
 
 Task status values: `Planned`, `In Progress`, `Blocked`, `Done`, `Deferred`.
@@ -9,7 +9,8 @@ Current implementation snapshot:
 - `Done`: `SETUP-001` to `SETUP-003`, `RUNNR-001` to `RUNNR-003`, `ARTIF-001` to `ARTIF-003`, `PARSE-001` to `PARSE-003`, `SAFEY-001` to `SAFEY-003`, `CLIUX-001`, `CLIUX-002`, `RULES-001` to `RULES-003`, `DOCUM-001` to `DOCUM-003`
 - `In Progress`: none
 - `Deferred`: none
-- `Planned`: `GAJAE-009`, `GAJAE-010` integration-contract work only if the KAH adapter cannot normalize existing KAT v0.1.0 artifacts without KAT changes
+- `Planned`: `GAJAE-010` durable operator docs/skill guidance after the KAH-side GAJAE-009 normalization contract
+- `Done`: `GAJAE-009` documented that KAH normalizes existing KAT v0.1.0 artifacts without KAT source changes
 
 ## SETUP: Project foundation
 
@@ -80,5 +81,5 @@ KAT remains a standalone deterministic tester. These GAJAE entries document inte
 
 | Task ID | Status | Goal | Reference |
 |---|---|---|---|
-| GAJAE-009 | Planned | Support KAH attachment of KAT v0.1.0 factual evidence by either documenting the KAH-side normalization mapping as sufficient or, only if needed, adding a KAT-emitted bindable GAJAE evidence snapshot. Preserve command exit code, extractor status, summary/raw refs, and no-authority semantics. | `KAT-REQ-RQART-003`, `KAT-REQ-RQART-005`, `KAT-REQ-RQWAT-001`, `ADR-0001`, `ADR-0002` |
-| GAJAE-010 | Planned | Update KAT docs after GAJAE-009 settles the final attach contract, including whether raw KAT status remains unchanged with KAH normalization or KAT emits an additional compatibility artifact. | `KAT-REQ-RQDOC-001`, `KAT-REQ-RQDOC-002`, `KAT-REQ-RQWAT-002` |
+| GAJAE-009 | Done | KAH-side normalization is sufficient for KAH attachment of existing KAT v0.1.0 factual status/summary/raw-log evidence without KAT source changes or a KAT-emitted compatibility snapshot. Preserve command exit code, extractor status, summary/raw refs, and no-authority semantics. | `KAT-REQ-RQART-003`, `KAT-REQ-RQART-005`, `KAT-REQ-RQWAT-001`, `ADR-0001`, `ADR-0002` |
+| GAJAE-010 | Planned | Update durable KAS/KAH/KAT operator docs and skill guidance now that GAJAE-009 settled the final attach contract: raw KAT status remains unchanged, while KAH normalizes status/summary/raw-log refs for attachment. | `KAT-REQ-RQDOC-001`, `KAT-REQ-RQDOC-002`, `KAT-REQ-RQWAT-002` |

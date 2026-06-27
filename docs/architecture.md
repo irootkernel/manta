@@ -20,7 +20,7 @@ KAT is a deterministic test and log-evidence tool. It should run test commands, 
 - KAT is not an autonomous test-writing agent.
 - KAT is not a KAS authority layer.
 - KAT is not a KAH state ledger.
-- For GAJAE-009, KAT may expose an optional bindable evidence snapshot only if KAH cannot safely normalize existing KAT v0.1.0 artifacts. Such a snapshot is still factual test evidence, not KAS/KAH/GJC authority.
+- For GAJAE-009, KAH normalizes existing KAT v0.1.0 status/summary/raw-log artifacts for attachment, so KAT does not emit a separate bindable evidence snapshot. KAT output remains factual test evidence, not KAS/KAH/GJC authority.
 - KAT does not decide that a failed command passed.
 - KAT does not rely on terminal/tmux log streaming as a control plane.
 

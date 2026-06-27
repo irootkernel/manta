@@ -110,7 +110,7 @@ kkachi-agent-tester --run-id example-run run unit
 # writes .kkachi/runs/example-run/artifacts/test/unit.summary.json
 # writes .kkachi/runs/example-run/artifacts/test/unit.summary.md
 # writes .kkachi/runs/example-run/artifacts/test/unit.status.json
-# GAJAE-009 note: KAH attach may require a normalized bindable snapshot; raw KAT v0.1.0 status remains factual evidence only.
+# GAJAE-009 note: KAH normalizes raw KAT v0.1.0 status/summary/raw-log refs for attachment; KAT emits factual evidence only.
 # writes .kkachi/runs/example-run/artifacts/test/excerpts/F001.log
 ```
 
