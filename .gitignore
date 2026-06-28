@@ -1,4 +1,10 @@
 bin/
 
 .gjc/
+.kkachi/
+.kat/
+.codegraph/
+.omx/
+.omc/
+.external-review-sidecar/
 
