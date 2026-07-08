@@ -3,7 +3,7 @@ package config
 import (
 	"testing"
 
-	"kkachi-agent-tester/internal/model"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
 )
 
 func TestValidateAcceptsImplementedParsers(t *testing.T) {

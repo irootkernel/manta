@@ -12,8 +12,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"kkachi-agent-tester/internal/model"
-	"kkachi-agent-tester/internal/rules"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/rules"
 )
 
 func rulesCommand(opts globalOptions, args []string, stdout, stderr io.Writer) int {

@@ -13,8 +13,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"kkachi-agent-tester/internal/extract"
-	"kkachi-agent-tester/internal/model"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/extract"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
 )
 
 func RulesDir(repoRoot string) string {

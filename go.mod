@@ -1,4 +1,4 @@
-module kkachi-agent-tester
+module github.com/SeventeenthEarth/kkachi-agent-tester
 
 go 1.26
 

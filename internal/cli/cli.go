@@ -12,13 +12,13 @@ import (
 	"strings"
 	"time"
 
-	"kkachi-agent-tester/internal/artifacts"
-	"kkachi-agent-tester/internal/config"
-	"kkachi-agent-tester/internal/extract"
-	"kkachi-agent-tester/internal/model"
-	"kkachi-agent-tester/internal/rules"
-	"kkachi-agent-tester/internal/runner"
-	"kkachi-agent-tester/internal/safety"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/artifacts"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/config"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/extract"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/rules"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/runner"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
 )
 
 type globalOptions struct {
@@ -45,7 +45,7 @@ type runResult struct {
 }
 
 func Main(args []string, stdout, stderr io.Writer) int {
-	return Run(args, stdout, stderr, NewBuildInfo("kkachi-agent-tester", "0.1.0", "unknown", "unknown"))
+	return Run(args, stdout, stderr, NewBuildInfo("kkachi-agent-tester", "0.1.1", "unknown", "unknown"))
 }
 
 func Run(args []string, stdout, stderr io.Writer, info BuildInfo) int {

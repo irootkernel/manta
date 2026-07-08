@@ -20,13 +20,14 @@ Important behavior:
 ## Build
 
 ```bash
-go build ./cmd/kkachi-agent-tester
+go build .
+go install github.com/SeventeenthEarth/kkachi-agent-tester@v0.1.1
 make install
 make install-toolchain
 kkachi-agent-tester --version
 ```
 
-`make install` installs the binary with embedded build metadata. `make install-toolchain` installs a versioned toolchain copy under `~/.local/kkachi/toolchains/kat/v0.1.0/bin/`.
+`make install` installs the binary with embedded build metadata from a checkout. `make install-toolchain` installs a versioned toolchain copy under `~/.local/kkachi/toolchains/kat/v0.1.1/bin/`.
 
 ## Verify
 

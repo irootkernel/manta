@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"kkachi-agent-tester/internal/model"
-	"kkachi-agent-tester/internal/safety"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
 )
 
 func TestWriteSummaryJSONFailsWhenTooLarge(t *testing.T) {

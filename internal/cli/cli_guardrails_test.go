@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"kkachi-agent-tester/internal/model"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
 )
 
 func TestSummarizeRebuildsArtifactsFromRawLogOnly(t *testing.T) {

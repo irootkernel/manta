@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"kkachi-agent-tester/internal/model"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
 )
 
 func TestProcessGenericFailureProducesPreciseSpan(t *testing.T) {

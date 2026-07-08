@@ -1,0 +1,269 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Final
+
+
+TOOL_NAME: Final = "kkachi-agent-tester-toolchain"
+BIN_NAME: Final = "kkachi-agent-tester"
+SCHEMA_VERSION: Final = "kkachi.toolchain.v1"
+SEMVER_RE: Final = re.compile(r"^v?(\d+\.\d+\.\d+)$")
+SEMVER_TOKEN_RE: Final = re.compile(r"(?<![A-Za-z0-9._-])v?(\d+\.\d+\.\d+)(?![A-Za-z0-9._-])")
+KEY_RE: Final = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+@dataclass(frozen=True, slots=True)
+class Selection:
+    project_root: Path
+    binary: Path
+    version_source: str
+    expected_version: str | None
+    version_output: str
+
+
+class ToolchainError(RuntimeError):
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
+def fail(message: str) -> None:
+    print(f"{TOOL_NAME}: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def strip_yaml_comment(value: str) -> str:
+    quote = ""
+    escaped = False
+    out: list[str] = []
+    for ch in value:
+        if escaped:
+            out.append(ch)
+            escaped = False
+            continue
+        if ch == "\\" and quote:
+            out.append(ch)
+            escaped = True
+            continue
+        if ch in ("'", '"'):
+            if not quote:
+                quote = ch
+            elif quote == ch:
+                quote = ""
+            out.append(ch)
+            continue
+        if ch == "#" and not quote:
+            break
+        out.append(ch)
+    if quote:
+        raise ToolchainError("unterminated quoted scalar")
+    return "".join(out).strip()
+
+
+def unquote(value: str) -> str:
+    value = value.strip()
+    if not value:
+        return value
+    if value[0] in ("'", '"'):
+        if len(value) < 2 or value[-1] != value[0]:
+            raise ToolchainError("unterminated quoted scalar")
+        return value[1:-1]
+    if value[-1:] in ("'", '"'):
+        raise ToolchainError("unterminated quoted scalar")
+    return value
+
+
+def parse_toolchain(path: Path) -> dict[str, str]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ToolchainError(f"cannot read {path}: {exc}") from exc
+
+    values: dict[str, str] = {}
+    stack: list[str] = []
+    for line_no, raw_line in enumerate(text.splitlines(), start=1):
+        if "\t" in raw_line:
+            raise ToolchainError(f"malformed {path}: tab indentation is not supported at line {line_no}")
+        stripped = raw_line.strip()
+        if not stripped or stripped == "---" or stripped.startswith("#"):
+            continue
+        if stripped.startswith("-"):
+            continue
+        indent = len(raw_line) - len(raw_line.lstrip(" "))
+        if indent % 2 != 0:
+            raise ToolchainError(f"malformed {path}: indentation must use two-space levels at line {line_no}")
+        level = indent // 2
+        if level > len(stack):
+            raise ToolchainError(f"malformed {path}: unexpected indentation at line {line_no}")
+        if ":" not in stripped:
+            raise ToolchainError(f"malformed {path}: expected key: value at line {line_no}")
+        key, raw_value = stripped.split(":", 1)
+        key = key.strip()
+        if not KEY_RE.match(key):
+            raise ToolchainError(f"malformed {path}: unsupported key {key!r} at line {line_no}")
+        stack = stack[:level]
+        value = unquote(strip_yaml_comment(raw_value))
+        dotted = ".".join(stack + [key])
+        if value == "":
+            stack.append(key)
+            continue
+        if dotted in values:
+            raise ToolchainError(f"malformed {path}: duplicate key {dotted} at line {line_no}")
+        values[dotted] = value
+        if level == 0:
+            values[key] = value
+
+    if not values:
+        raise ToolchainError(f"malformed {path}: no scalar metadata found")
+    return values
+
+
+def project_root() -> Path:
+    root_raw = os.environ.get("KKACHI_PROJECT_ROOT")
+    if root_raw:
+        try:
+            root = Path(root_raw).expanduser().resolve()
+        except OSError as exc:
+            raise ToolchainError(f"cannot resolve KKACHI_PROJECT_ROOT={root_raw}: {exc}") from exc
+        if not root.is_dir():
+            raise ToolchainError(f"KKACHI_PROJECT_ROOT must be an existing directory: {root}")
+        return root
+
+    current = Path.cwd().resolve()
+    while True:
+        if (current / ".kkachi" / "toolchain.yaml").is_file():
+            return current
+        if current.parent == current:
+            return Path.cwd().resolve()
+        current = current.parent
+
+
+def normalize_version(raw: str, field: str) -> str:
+    value = raw.strip()
+    match = SEMVER_RE.match(value)
+    if not match:
+        raise ToolchainError(f"invalid {field} value {value!r}; expected vX.Y.Z or X.Y.Z")
+    return "v" + match.group(1)
+
+
+def default_toolchain_root() -> Path:
+    override = os.environ.get("KKACHI_TOOLCHAIN_ROOT")
+    if override:
+        return Path(override).expanduser()
+    return Path.home() / ".local" / "kkachi" / "toolchains"
+
+
+def require_absolute_executable(path: Path, label: str) -> Path:
+    if not path.is_absolute():
+        raise ToolchainError(f"{label} must be an absolute path: {path}")
+    if not path.is_file() or not os.access(path, os.X_OK):
+        raise ToolchainError(f"selected {label} binary is not executable: {path}")
+    return path
+
+
+def version_output(binary: Path) -> str:
+    try:
+        completed = subprocess.run(
+            [str(binary), "--version"],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=15,
+        )
+    except OSError as exc:
+        raise ToolchainError(f"version check failed for {binary}: {exc}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ToolchainError(f"version check timed out for {binary}") from exc
+    output = (completed.stdout or "").strip()
+    if completed.returncode != 0:
+        raise ToolchainError(f"version check failed for {binary}: exit {completed.returncode}: {output}")
+    return output
+
+
+def assert_version(binary: Path, expected: str | None) -> str:
+    output = version_output(binary)
+    if expected is None:
+        return output
+    match = SEMVER_TOKEN_RE.search(output)
+    if not match:
+        raise ToolchainError(f"KAT version output did not contain a semver token: {output!r}")
+    actual = "v" + match.group(1)
+    if actual != expected:
+        raise ToolchainError(f"KAT binary version mismatch: metadata expects {expected}, {binary} reports {actual} ({output})")
+    return output
+
+
+def select_from_metadata(root: Path) -> Selection:
+    config = root / ".kkachi" / "toolchain.yaml"
+    if not config.is_file():
+        raise ToolchainError(
+            "missing explicit KAT toolchain source; set KKACHI_KAT_BIN or add kat.cli_version/kat.binary_path metadata"
+        )
+    values = parse_toolchain(config)
+    schema = values.get("schema_version", "").strip()
+    if schema and schema != SCHEMA_VERSION:
+        raise ToolchainError(f"unsupported schema_version {schema!r} in {config}; expected {SCHEMA_VERSION}")
+
+    version_raw = values.get("kat.cli_version", "").strip()
+    binary_raw = values.get("kat.binary_path", "").strip()
+    expected = normalize_version(version_raw, "kat.cli_version") if version_raw else None
+    if binary_raw:
+        binary = require_absolute_executable(Path(binary_raw).expanduser(), "KAT")
+        output = assert_version(binary, expected)
+        source = "kat.binary_path"
+        return Selection(root, binary, source, expected, output)
+    if expected is None:
+        raise ToolchainError(
+            "missing explicit KAT toolchain source; set KKACHI_KAT_BIN or add kat.cli_version/kat.binary_path metadata"
+        )
+    binary = require_absolute_executable(default_toolchain_root() / "kat" / expected / "bin" / BIN_NAME, "KAT")
+    output = assert_version(binary, expected)
+    return Selection(root, binary, "kat.cli_version", expected, output)
+
+
+def select_toolchain() -> Selection:
+    root = project_root()
+    env_bin = os.environ.get("KKACHI_KAT_BIN", "").strip()
+    if env_bin:
+        binary = require_absolute_executable(Path(env_bin).expanduser(), "KKACHI_KAT_BIN")
+        output = assert_version(binary, None)
+        return Selection(root, binary, "KKACHI_KAT_BIN", None, output)
+    return select_from_metadata(root)
+
+
+def print_status(selection: Selection) -> None:
+    print(f"project_root={selection.project_root}")
+    print(f"kat_bin={selection.binary}")
+    print(f"kat_version_source={selection.version_source}")
+    if selection.expected_version is not None:
+        print(f"kat_cli_version={selection.expected_version}")
+    print(f"kat_version_output={selection.version_output}")
+
+
+def run(argv: list[str]) -> int:
+    try:
+        selection = select_toolchain()
+    except ToolchainError as exc:
+        fail(exc.message)
+    if argv and argv[0] == "--toolchain-status":
+        print_status(selection)
+        return 0
+    env = os.environ.copy()
+    env["KKACHI_PROJECT_ROOT"] = str(selection.project_root)
+    env["KKACHI_EFFECTIVE_KAT_BIN"] = str(selection.binary)
+    try:
+        os.execvpe(str(selection.binary), [str(selection.binary), *argv], env)
+    except OSError as exc:
+        fail(f"failed to exec selected KAT binary {selection.binary}: {exc}")
+    return 127
+
+
+if __name__ == "__main__":
+    raise SystemExit(run(sys.argv[1:]))

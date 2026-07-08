@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strings"
 
-	"kkachi-agent-tester/internal/model"
-	"kkachi-agent-tester/internal/safety"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
 )
 
 var knownRuleParsers = map[string]bool{

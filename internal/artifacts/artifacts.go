@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"kkachi-agent-tester/internal/model"
-	"kkachi-agent-tester/internal/safety"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
 )
 
 func PlanPaths(repoRoot, outputDir, runID, commandID string) model.ArtifactPaths {

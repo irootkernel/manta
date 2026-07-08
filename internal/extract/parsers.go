@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"kkachi-agent-tester/internal/model"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
 )
 
 var (
