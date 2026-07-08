@@ -18,6 +18,11 @@ type BuildInfo struct {
 	BuildDate string `json:"build_date"`
 }
 
+type versionOutput struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
 // NewBuildInfo returns the CLI version payload. Explicit linker-provided values
 // win, but module-aware installs such as `go install module@v0.1.0` can still
 // surface the tagged module version without running this repo's Makefile.

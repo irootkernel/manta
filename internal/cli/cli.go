@@ -614,10 +614,10 @@ func excerptCommand(opts globalOptions, args []string, stdout, stderr io.Writer)
 
 func writeVersion(w io.Writer, info BuildInfo, jsonMode bool) {
 	if jsonMode {
-		_ = json.NewEncoder(w).Encode(info)
+		_ = json.NewEncoder(w).Encode(versionOutput{Name: info.Name, Version: info.Version})
 		return
 	}
-	writef(w, "%s %s\n", info.Name, info.Version)
+	writef(w, "%s v%s\n", info.Name, info.Version)
 }
 
 func writeLine(w io.Writer, args ...any) {

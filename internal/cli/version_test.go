@@ -14,7 +14,7 @@ func TestVersionHumanOutput(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0", exitCode)
 	}
-	if got, want := stdout.String(), "kkachi-agent-tester 0.1.0\n"; got != want {
+	if got, want := stdout.String(), "kkachi-agent-tester v0.1.0\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if stderr.Len() != 0 {
@@ -32,12 +32,13 @@ func TestVersionJSONOutput(t *testing.T) {
 		t.Fatalf("exitCode = %d, want 0", exitCode)
 	}
 
-	var payload BuildInfo
+	var payload versionOutput
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
 		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout.String())
 	}
-	if payload != info {
-		t.Fatalf("payload = %#v, want %#v", payload, info)
+	want := versionOutput{Name: "kkachi-agent-tester", Version: "1.2.3"}
+	if payload != want {
+		t.Fatalf("payload = %#v, want %#v", payload, want)
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
