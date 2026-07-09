@@ -15,7 +15,7 @@ func TestToolchainScriptStatusWithEnvBinary(t *testing.T) {
 	root := projectRoot(t)
 	repo := t.TempDir()
 	canonicalRepo := canonicalPath(t, repo)
-	bin := writeFakeKAT(t, t.TempDir(), "0.1.1")
+	bin := writeFakeKAT(t, t.TempDir(), "0.1.3")
 
 	cmd := exec.Command(python, filepath.Join(root, "scripts", "kkachi-agent-tester-toolchain"), "--toolchain-status")
 	cmd.Dir = repo
@@ -29,7 +29,7 @@ func TestToolchainScriptStatusWithEnvBinary(t *testing.T) {
 		"project_root=" + canonicalRepo,
 		"kat_bin=" + bin,
 		"kat_version_source=KKACHI_KAT_BIN",
-		"kat_version_output=kkachi-agent-tester 0.1.1",
+		"kat_version_output=kkachi-agent-tester 0.1.3",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q:\n%s", want, output)
@@ -43,11 +43,11 @@ func TestToolchainScriptStatusWithVersionedMetadata(t *testing.T) {
 	root := projectRoot(t)
 	repo := t.TempDir()
 	toolchainRoot := t.TempDir()
-	binDir := filepath.Join(toolchainRoot, "kat", "v0.1.1", "bin")
-	_ = writeFakeKAT(t, binDir, "0.1.1")
+	binDir := filepath.Join(toolchainRoot, "kat", "v0.1.3", "bin")
+	_ = writeFakeKAT(t, binDir, "0.1.3")
 	writeToolchainMetadata(t, repo, `schema_version: "kkachi.toolchain.v1"
 kat:
-  cli_version: "0.1.1"
+  cli_version: "0.1.3"
 `)
 
 	cmd := exec.Command(python, filepath.Join(root, "scripts", "kkachi-agent-tester-toolchain"), "--toolchain-status")
@@ -60,8 +60,8 @@ kat:
 	output := string(out)
 	for _, want := range []string{
 		"kat_version_source=kat.cli_version",
-		"kat_cli_version=v0.1.1",
-		"kat_version_output=kkachi-agent-tester 0.1.1",
+		"kat_cli_version=v0.1.3",
+		"kat_version_output=kkachi-agent-tester 0.1.3",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q:\n%s", want, output)
@@ -75,7 +75,7 @@ func TestToolchainScriptForwardsArguments(t *testing.T) {
 	root := projectRoot(t)
 	repo := t.TempDir()
 	canonicalRepo := canonicalPath(t, repo)
-	bin := writeFakeKAT(t, t.TempDir(), "0.1.1")
+	bin := writeFakeKAT(t, t.TempDir(), "0.1.3")
 
 	cmd := exec.Command(python, filepath.Join(root, "scripts", "kkachi-agent-tester-toolchain"), "run", "--lane", "unit", "--", "echo", "ok")
 	cmd.Dir = repo
@@ -141,7 +141,7 @@ kat:
 		bin := writeFakeKAT(t, t.TempDir(), "0.1.2")
 		writeToolchainMetadata(t, repo, `schema_version: "kkachi.toolchain.v1"
 kat:
-  cli_version: "0.1.1"
+  cli_version: "0.1.3"
   binary_path: "`+bin+`"
 `)
 		cmd := exec.Command(python, filepath.Join(root, "scripts", "kkachi-agent-tester-toolchain"), "--toolchain-status")

@@ -45,7 +45,7 @@ type runResult struct {
 }
 
 func Main(args []string, stdout, stderr io.Writer) int {
-	return Run(args, stdout, stderr, NewBuildInfo("kkachi-agent-tester", "0.1.1", "unknown", "unknown"))
+	return Run(args, stdout, stderr, NewBuildInfo("kkachi-agent-tester", "0.1.3", "unknown", "unknown"))
 }
 
 func Run(args []string, stdout, stderr io.Writer, info BuildInfo) int {

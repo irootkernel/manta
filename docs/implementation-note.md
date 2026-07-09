@@ -167,7 +167,7 @@ Test fixtures should cover:
 
 ## Release-readiness checklist
 
-Before tagging `v0.1.1`, verify all of the following:
+Before tagging `v0.1.3`, verify all of the following:
 
 - `go build ./cmd/kkachi-agent-tester`
 - `make test`
