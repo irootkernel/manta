@@ -43,7 +43,15 @@ type runResult struct {
 	RawLog     string          `json:"raw_log,omitempty"`
 	Failures   int             `json:"failures"`
 	Extractor  string          `json:"extractor"`
+	diagnostic string
 }
+
+type materializationSource uint8
+
+const (
+	materializationExecutedCommand materializationSource = iota
+	materializationSummarizedRaw
+)
 
 func Main(args []string, stdout, stderr io.Writer) int {
 	return Run(args, stdout, stderr, NewBuildInfo("kkachi-agent-tester", "0.1.3", "unknown", "unknown"))
@@ -165,6 +173,9 @@ func runCommand(opts globalOptions, args []string, stdout, stderr io.Writer) int
 		writeLine(stderr, err)
 		return model.ExitCodeFor(err)
 	}
+	if result.diagnostic != "" {
+		writeLine(stderr, result.diagnostic)
+	}
 	if opts.JSON {
 		data, _ := json.Marshal(result)
 		writeLine(stdout, string(data))
@@ -195,10 +206,13 @@ func summarizeCommand(opts globalOptions, args []string, stdout, stderr io.Write
 		NoColor:    opts.NoColor,
 		Verbose:    opts.Verbose,
 	}
-	result, err := executeSummarize(req, rest[0])
+	result, exitCode, err := executeSummarize(req, rest[0])
 	if err != nil {
 		writeLine(stderr, err)
 		return model.ExitCodeFor(err)
+	}
+	if result.diagnostic != "" {
+		writeLine(stderr, result.diagnostic)
 	}
 	if opts.JSON {
 		data, _ := json.Marshal(result)
@@ -206,7 +220,7 @@ func summarizeCommand(opts globalOptions, args []string, stdout, stderr io.Write
 	} else {
 		printRunResult(stdout, result)
 	}
-	return 0
+	return exitCode
 }
 
 func executeRun(req model.RunRequest) (runResult, int, error) {
@@ -269,17 +283,17 @@ func executeRun(req model.RunRequest) (runResult, int, error) {
 	rawSHA := artifacts.SHA256(runOutput.RawLogBytes)
 	relRaw := artifacts.Rel(req.RepoRoot, paths.RawLogPath)
 
-	result, processed, err := materializeArtifacts(req, cfg, paths, rawSHA, relRaw, runOutput, applicableRules)
+	result, processed, err := materializeArtifacts(req, cfg, paths, rawSHA, relRaw, runOutput, applicableRules, materializationExecutedCommand)
 	if err != nil {
 		return runResult{}, 0, err
 	}
 	return result, exitCodeFromRun(processed), nil
 }
 
-func executeSummarize(req model.RunRequest, rawLogArg string) (runResult, error) {
+func executeSummarize(req model.RunRequest, rawLogArg string) (runResult, int, error) {
 	cfg, _, err := config.Load(req.RepoRoot, req.ConfigPath, true)
 	if err != nil {
-		return runResult{}, err
+		return runResult{}, 0, err
 	}
 	resolved := rawLogArg
 	if !filepath.IsAbs(resolved) {
@@ -287,25 +301,25 @@ func executeSummarize(req model.RunRequest, rawLogArg string) (runResult, error)
 	}
 	raw, err := os.ReadFile(resolved)
 	if err != nil {
-		return runResult{}, model.NewKATError(model.ExitCodeConfigError, "read raw log", err)
+		return runResult{}, 0, model.NewKATError(model.ExitCodeConfigError, "read raw log", err)
 	}
 	commandID := summarizeCommandID(resolved)
 	lane := commandID
 	parser := "generic"
 	if err := config.ValidateParserLabel(parser); err != nil {
-		return runResult{}, err
+		return runResult{}, 0, err
 	}
 	applicableRules, err := rules.LoadApplicable(req.RepoRoot, lane, parser)
 	if err != nil {
-		return runResult{}, err
+		return runResult{}, 0, err
 	}
 	paths, err := artifacts.PreparePaths(req.RepoRoot, req.OutputDir, req.RunID, commandID)
 	if err != nil {
-		return runResult{}, err
+		return runResult{}, 0, err
 	}
 	rawSHA, err := artifacts.WriteRawLog(paths, raw)
 	if err != nil {
-		return runResult{}, err
+		return runResult{}, 0, err
 	}
 	relRaw := artifacts.Rel(req.RepoRoot, paths.RawLogPath)
 	status, exitCode := inferSummarizeStatus(raw)
@@ -320,22 +334,27 @@ func executeSummarize(req model.RunRequest, rawLogArg string) (runResult, error)
 		Status:      status,
 		RawLogBytes: raw,
 	}
-	result, _, err := materializeArtifacts(req, cfg, paths, rawSHA, relRaw, runOutput, applicableRules)
+	result, _, err := materializeArtifacts(req, cfg, paths, rawSHA, relRaw, runOutput, applicableRules, materializationSummarizedRaw)
 	if err != nil {
-		return runResult{}, err
+		return runResult{}, 0, err
 	}
-	return result, nil
+	if result.Status == model.RunStatusInternalErr {
+		return result, int(model.ExitCodeParserError), nil
+	}
+	return result, 0, nil
 }
 
-func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.ArtifactPaths, rawSHA, relRaw string, runOutput model.RunOutput, applicableRules []model.Rule) (runResult, model.RunOutput, error) {
-	runOutput, err := extract.Process(runOutput.RawLogBytes, runOutput, applicableRules)
-	if err != nil {
-		if runOutput.Status == model.RunStatusFailed || runOutput.Status == model.RunStatusTimedOut || runOutput.Status == model.RunStatusKilled {
-			runOutput.Failures = nil
-			runOutput.Warnings = nil
-			runOutput.ExtractorStatus = model.ExtractorStatusDegraded
-		} else {
-			return runResult{}, model.RunOutput{}, err
+func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.ArtifactPaths, rawSHA, relRaw string, runOutput model.RunOutput, applicableRules []model.Rule, source materializationSource) (runResult, model.RunOutput, error) {
+	runOutput, extractionErr := extract.Process(runOutput.RawLogBytes, runOutput, applicableRules)
+	if extractionErr != nil {
+		runOutput.Failures = nil
+		runOutput.Warnings = nil
+		runOutput.ExtractorStatus = model.ExtractorStatusDegraded
+		if source == materializationSummarizedRaw {
+			runOutput.Status = model.RunStatusInternalErr
+			runOutput.Metadata.ExitCode = int(model.ExitCodeParserError)
+		} else if runOutput.Status == model.RunStatusPassed {
+			runOutput.Status = model.RunStatusInternalErr
 		}
 	}
 	metadata := runOutput.Metadata
@@ -402,6 +421,9 @@ func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.Ar
 		RawLog:     relRaw,
 		Failures:   len(summary.Failures),
 		Extractor:  string(summary.ExtractorStatus),
+	}
+	if extractionErr != nil {
+		result.diagnostic = safety.BoundBytes(redactor.Apply(extractionErr.Error()), safety.MaxExcerptBytes)
 	}
 	return result, runOutput, nil
 }

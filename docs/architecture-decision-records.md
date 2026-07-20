@@ -40,11 +40,15 @@ KAT extracts summaries from raw logs. Extraction quality may be precise, partial
 
 ### Decision
 
-The executed command's exit code and timeout/killed state determine pass/fail status. Rules and parsers only locate and summarize evidence. They must never convert a failing command into pass. Top-level run `status` is therefore limited to execution-result states, while extraction quality is tracked separately by `extractor_status`.
+The executed command's exit code and timeout/killed state determine pass/fail status. Rules and parsers only locate and summarize evidence. They must never convert a failing command into pass. Extraction quality is tracked separately by `extractor_status`.
+
+`internal_error` is reserved for a KAT evidence-pipeline failure when no authoritative non-pass command result must be retained. If extraction fails after a command exited `0`, summary and status artifacts keep `exit_code: 0`, use `status: internal_error` and `extractor_status: degraded`, and the KAT process exits `4`. If the command already failed, timed out, or was killed, that state and exit code remain authoritative. Standalone summarize has no authoritative execution result, so an extraction internal error uses `status: internal_error` and exit code `4` in its artifacts and exits `4`.
 
 ### Consequences
 
 - Failed commands with no matched failure span still fail.
+- Specialized parser misses do not retry generic extraction.
+- Extraction internal errors preserve failed, timed-out, and killed command truth while still materializing degraded artifacts when possible.
 - `extractor_status: degraded` becomes a rule-mining signal, not a fallback pass path.
 - CLI exit behavior remains useful in CI and scripts.
 

@@ -17,7 +17,7 @@ Scope: Open documentation and implementation follow-up notes
 Status: Active
 References: `HARDE-001` to `HARDE-007`, `KAT-REQ-RQHAR-001` to `KAT-REQ-RQHAR-007`
 
-`HARDE-001` through `HARDE-004` are complete. Continue with `HARDE-005` through `HARDE-007` as separate reviewable PRs in numerical order. Each task must retain its focused evidence and pass the affected existing suites before its roadmap status changes to `Done`. `HARDE-007` remains the final end-to-end gate; passing an earlier focused test does not close the epic.
+`HARDE-001` through `HARDE-005` are complete. Continue with `HARDE-006` through `HARDE-007` as separate reviewable PRs in numerical order. Each task must retain its focused evidence and pass the affected existing suites before its roadmap status changes to `Done`. `HARDE-007` remains the final end-to-end gate; passing an earlier focused test does not close the epic.
 
 ## Completed items
 

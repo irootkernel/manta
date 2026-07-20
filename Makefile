@@ -65,8 +65,9 @@ vet:
 
 guardrails:
 	$(GO) test -count=1 ./internal/config -run '^TestValidateRejectsUnknownParser$$'
+	$(GO) test -count=1 ./internal/extract -run '^TestProcessExtractorStatusContract$$'
 	$(GO) test -count=1 ./internal/rules -run '^(TestLoadApplicableFailsOnInvalidDiscoveredFutureParserRule|TestLoadApplicableFailsOnInvalidMatchingRule|TestRuleDetectsOvermatch)$$'
-	$(GO) test -count=1 ./internal/cli -run '^(TestRawLogPersistsWhenExtractionFails|TestSummarizeRebuildsArtifactsFromRawLogOnly|TestRulesLifecycleCommands)$$'
+	$(GO) test -count=1 ./internal/cli -run '^(TestMaterializeArtifactsExtractionErrorRetainsNonPassRunState|TestRawLogPersistsWhenExtractionFails|TestRunInternalErrorAfterPassedCommandMaterializesArtifacts|TestSummarizeInternalErrorMaterializesArtifacts|TestSummarizeRebuildsArtifactsFromRawLogOnly|TestRulesLifecycleCommands)$$'
 
 unit-test:
 	$(GO) test -count=1 $(UNIT_PACKAGES)

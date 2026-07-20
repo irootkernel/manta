@@ -235,9 +235,21 @@ Other fields may be present for convenience, but watcher compatibility is define
 Command execution status is authoritative. Parser quality only affects evidence quality.
 
 - `exit_code == 0` and no internal error: command passed.
-- `exit_code != 0`: command failed even if no parser matched a span.
-- Non-zero exit with no useful span should emit `status: failed` and `extractor_status: degraded`.
-- Parser or rule failure should never convert a failed command into pass.
+- A failed command retains its non-zero exit code even if no parser matched a span.
+- Timed-out and killed commands retain their original status and process-compatible exit code.
+- Any authoritative non-pass result with no useful span retains its status and exit code with `extractor_status: degraded`.
+- Parser or rule matches and misses never convert an authoritative non-pass result into pass.
+- Project rules run before the selected parser. When no rule matches, a specialized parser uses only its own patterns and never retries generic extraction.
+
+| Extraction outcome | Artifact status / exit code | Extractor status | KAT CLI exit code |
+|---|---|---|---:|
+| Specialized parser miss after command pass | `passed` / `0` | `no_match` | `0` |
+| Specialized parser miss after command failure, timeout, or kill | original status / original exit code | `degraded` | original exit code |
+| Extraction internal error after command pass | `internal_error` / `0` | `degraded` | `4` |
+| Extraction internal error after command failure, timeout, or kill | original status / original exit code | `degraded` | original exit code |
+| Extraction internal error during standalone summarize | `internal_error` / `4` | `degraded` | `4` |
+
+When extraction fails internally, KAT preserves the raw log and writes empty failure/warning collections plus summary and status artifacts whenever those writes remain safe. The bounded, configured-redaction-aware diagnostic is emitted on stderr and is not added to the JSON schemas. Configuration, pre-execution, and artifact-write failures retain their existing fatal-error behavior.
 
 ## Raw-log handling policy
 

@@ -12,13 +12,18 @@ import (
 
 	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/artifacts"
 	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
 )
 
 type binaryRunResult struct {
-	Command    string `json:"command"`
-	Summary    string `json:"summary"`
-	StatusJSON string `json:"status_json"`
-	RawLog     string `json:"raw_log"`
+	Command    string          `json:"command"`
+	Status     model.RunStatus `json:"status"`
+	ExitCode   int             `json:"exit_code"`
+	Summary    string          `json:"summary"`
+	StatusJSON string          `json:"status_json"`
+	RawLog     string          `json:"raw_log"`
+	Failures   int             `json:"failures"`
+	Extractor  string          `json:"extractor"`
 }
 
 type binaryCommandOutput struct {
@@ -261,6 +266,64 @@ func TestBinaryJSONRedactsCommandMetadata(t *testing.T) {
 	}
 }
 
+func TestBinaryExtractionContracts(t *testing.T) {
+	t.Parallel()
+	root := projectRoot(t)
+	bin := buildBinary(t, root)
+
+	t.Run("specialized parser miss does not use generic fallback", func(t *testing.T) {
+		repo := t.TempDir()
+		writeE2EConfigWithParser(t, repo, "vitest", "#!/bin/sh\necho 'TypeError: generic-looking failure'\necho 'src/foo.test.ts:42:13'\nexit 7\n")
+
+		result, stderr := runBinaryJSONWithExit(t, bin, repo, 7, "run", "unit")
+		if stderr != "" {
+			t.Fatalf("expected no diagnostic for a parser miss, got %q", stderr)
+		}
+		summary, status, _ := loadBinaryRunArtifacts(t, repo, result)
+		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusFailed, 7)
+	})
+
+	t.Run("passing command extraction error preserves command exit", func(t *testing.T) {
+		repo := t.TempDir()
+		writeE2EConfig(t, repo, "#!/bin/sh\ncat huge.raw.log\nexit 0\n")
+		raw := bytes.Repeat([]byte("x"), safety.MaxRegexInputBytes+1)
+		if err := os.WriteFile(filepath.Join(repo, "huge.raw.log"), raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		result, stderr := runBinaryJSONWithExit(t, bin, repo, int(model.ExitCodeParserError), "run", "unit")
+		if !strings.Contains(stderr, "regex input bound") {
+			t.Fatalf("expected bounded extraction diagnostic, got %q", stderr)
+		}
+		summary, status, copiedRaw := loadBinaryRunArtifacts(t, repo, result)
+		if !bytes.Equal(copiedRaw, raw) {
+			t.Fatal("passing-command internal error did not preserve raw evidence")
+		}
+		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusInternalErr, 0)
+		assertBinaryMarkdownContract(t, repo, result, "internal_error", "0", "degraded")
+	})
+
+	t.Run("summarize extraction error materializes internal error", func(t *testing.T) {
+		repo := t.TempDir()
+		raw := bytes.Repeat([]byte("y"), safety.MaxRegexInputBytes+1)
+		rawPath := filepath.Join(repo, "unit.raw.log")
+		if err := os.WriteFile(rawPath, raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		result, stderr := runBinaryJSONWithExit(t, bin, repo, int(model.ExitCodeParserError), "summarize", filepath.ToSlash(rawPath))
+		if !strings.Contains(stderr, "regex input bound") {
+			t.Fatalf("expected bounded summarize diagnostic, got %q", stderr)
+		}
+		summary, status, copiedRaw := loadBinaryRunArtifacts(t, repo, result)
+		if !bytes.Equal(copiedRaw, raw) {
+			t.Fatal("summarize internal error did not preserve copied raw evidence")
+		}
+		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusInternalErr, int(model.ExitCodeParserError))
+		assertBinaryMarkdownContract(t, repo, result, "internal_error", "4", "degraded")
+	})
+}
+
 func TestBinaryStandaloneCollisionResistance(t *testing.T) {
 	root := projectRoot(t)
 	bin := buildBinary(t, root)
@@ -427,6 +490,11 @@ func TestBinaryArtifactContainment(t *testing.T) {
 
 func writeE2EConfig(t *testing.T, repo, script string) {
 	t.Helper()
+	writeE2EConfigWithParser(t, repo, "generic", script)
+}
+
+func writeE2EConfigWithParser(t *testing.T, repo, parser, script string) {
+	t.Helper()
 	if err := os.MkdirAll(filepath.Join(repo, ".kkachi"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -436,7 +504,7 @@ func writeE2EConfig(t *testing.T, repo, script string) {
 		"  unit:",
 		"    command: [\"sh\", \"test.sh\"]",
 		"    lane: unit",
-		"    parser: generic",
+		"    parser: " + parser,
 		"    timeout_sec: 10",
 	}, "\n") + "\n"
 	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
@@ -449,14 +517,32 @@ func writeE2EConfig(t *testing.T, repo, script string) {
 
 func runBinaryJSON(t *testing.T, bin, repo string, args ...string) binaryRunResult {
 	t.Helper()
+	result, stderr := runBinaryJSONWithExit(t, bin, repo, 0, args...)
+	if stderr != "" {
+		t.Fatalf("expected no binary diagnostic, got %q", stderr)
+	}
+	return result
+}
+
+func runBinaryJSONWithExit(t *testing.T, bin, repo string, expectedExit int, args ...string) (binaryRunResult, string) {
+	t.Helper()
 	commandArgs := append([]string{"--repo", repo, "--json"}, args...)
 	cmd := exec.Command(bin, commandArgs...)
 	cmd.Dir = repo
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("binary command %q failed: %v output=%s", commandArgs, err, output)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if expectedExit == 0 {
+		if err != nil {
+			t.Fatalf("binary command %q failed: %v stdout=%s stderr=%s", commandArgs, err, stdout.String(), stderr.String())
+		}
+	} else {
+		output := append([]byte(nil), stdout.Bytes()...)
+		output = append(output, stderr.Bytes()...)
+		requireExitCode(t, err, expectedExit, output)
 	}
-	return decodeBinaryRunResult(t, output)
+	return decodeBinaryRunResult(t, stdout.Bytes()), stderr.String()
 }
 
 func decodeBinaryRunResult(t *testing.T, output []byte) binaryRunResult {
@@ -482,33 +568,10 @@ func assertDistinctBinaryRunDirectories(t *testing.T, repo string, results []bin
 
 func snapshotBinaryRunArtifacts(t *testing.T, repo string, result binaryRunResult, requireExcerpt bool) map[string][]byte {
 	t.Helper()
+	summary, status, _ := loadBinaryRunArtifacts(t, repo, result)
 	statusPath := filepath.Join(repo, filepath.FromSlash(result.StatusJSON))
-	statusData, err := os.ReadFile(statusPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var status model.Status
-	if err := json.Unmarshal(statusData, &status); err != nil {
-		t.Fatal(err)
-	}
 	summaryJSONPath := filepath.Join(repo, filepath.FromSlash(status.SummaryPath))
-	summaryData, err := os.ReadFile(summaryJSONPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var summary model.Summary
-	if err := json.Unmarshal(summaryData, &summary); err != nil {
-		t.Fatal(err)
-	}
 	rawPath := filepath.Join(repo, filepath.FromSlash(result.RawLog))
-	rawData, err := os.ReadFile(rawPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantRawSHA := artifacts.SHA256(rawData)
-	if summary.RawLogSHA256 != wantRawSHA || status.RawLogSHA256 != wantRawSHA {
-		t.Fatalf("raw checksum mismatch: summary=%q status=%q want=%q", summary.RawLogSHA256, status.RawLogSHA256, wantRawSHA)
-	}
 
 	paths := []string{
 		rawPath,
@@ -531,6 +594,70 @@ func snapshotBinaryRunArtifacts(t *testing.T, repo string, result binaryRunResul
 		snapshot[path] = data
 	}
 	return snapshot
+}
+
+func loadBinaryRunArtifacts(t *testing.T, repo string, result binaryRunResult) (model.Summary, model.Status, []byte) {
+	t.Helper()
+	statusPath := filepath.Join(repo, filepath.FromSlash(result.StatusJSON))
+	statusData, err := os.ReadFile(statusPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var status model.Status
+	if err := json.Unmarshal(statusData, &status); err != nil {
+		t.Fatal(err)
+	}
+	summaryPath := filepath.Join(repo, filepath.FromSlash(status.SummaryPath))
+	summaryData, err := os.ReadFile(summaryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var summary model.Summary
+	if err := json.Unmarshal(summaryData, &summary); err != nil {
+		t.Fatal(err)
+	}
+	rawPath := filepath.Join(repo, filepath.FromSlash(result.RawLog))
+	raw, err := os.ReadFile(rawPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantRawSHA := artifacts.SHA256(raw)
+	if summary.RawLogSHA256 != wantRawSHA || status.RawLogSHA256 != wantRawSHA {
+		t.Fatalf("raw checksum mismatch: summary=%q status=%q want=%q", summary.RawLogSHA256, status.RawLogSHA256, wantRawSHA)
+	}
+	if status.SummarySHA256 != artifacts.SHA256(summaryData) {
+		t.Fatalf("summary checksum mismatch: got=%q want=%q", status.SummarySHA256, artifacts.SHA256(summaryData))
+	}
+	if status.StatusHash != artifacts.ComputeStatusHash(status) {
+		t.Fatalf("status hash mismatch: got %q", status.StatusHash)
+	}
+	return summary, status, raw
+}
+
+func assertBinaryExtractionContract(t *testing.T, result binaryRunResult, summary model.Summary, status model.Status, wantStatus model.RunStatus, wantExitCode int) {
+	t.Helper()
+	if result.Status != wantStatus || result.ExitCode != wantExitCode || result.Extractor != string(model.ExtractorStatusDegraded) || result.Failures != 0 {
+		t.Fatalf("unexpected binary result: %+v", result)
+	}
+	if summary.Status != wantStatus || summary.ExitCode != wantExitCode || summary.ExtractorStatus != model.ExtractorStatusDegraded || summary.FailureCount != 0 || summary.WarningCount != 0 {
+		t.Fatalf("unexpected binary summary: %+v", summary)
+	}
+	if status.Status != wantStatus || status.ExitCode != wantExitCode || status.ExtractorStatus != model.ExtractorStatusDegraded {
+		t.Fatalf("unexpected binary status: %+v", status)
+	}
+}
+
+func assertBinaryMarkdownContract(t *testing.T, repo string, result binaryRunResult, wantStatus, wantExit, wantExtractor string) {
+	t.Helper()
+	markdown, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(result.Summary)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Status: " + wantStatus, "Exit code: " + wantExit, "Extractor: " + wantExtractor} {
+		if !strings.Contains(string(markdown), want) {
+			t.Fatalf("expected Markdown summary to contain %q, got %q", want, markdown)
+		}
+	}
 }
 
 func writeE2ESummary(t *testing.T, dir, reference string) string {

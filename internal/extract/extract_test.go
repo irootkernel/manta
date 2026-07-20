@@ -32,6 +32,77 @@ func TestProcessGenericFailureProducesPreciseSpan(t *testing.T) {
 	}
 }
 
+func TestProcessExtractorStatusContract(t *testing.T) {
+	t.Parallel()
+	matched := []struct {
+		name         string
+		raw          string
+		wantStatus   model.ExtractorStatus
+		wantFailures int
+	}{
+		{
+			name:         "precise generic match",
+			raw:          "TypeError: boom\nsrc/foo.test.ts:42:13\n- renders empty state\n",
+			wantStatus:   model.ExtractorStatusPrecise,
+			wantFailures: 1,
+		},
+		{
+			name:         "partial generic match",
+			raw:          "Error: boom\n",
+			wantStatus:   model.ExtractorStatusPartial,
+			wantFailures: 1,
+		},
+	}
+	for _, tt := range matched {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			run := model.RunOutput{
+				Status:   model.RunStatusFailed,
+				Metadata: model.RunMetadata{Parser: "generic"},
+			}
+			processed, err := Process([]byte(tt.raw), run, nil)
+			if err != nil {
+				t.Fatalf("Process failed: %v", err)
+			}
+			if processed.ExtractorStatus != tt.wantStatus {
+				t.Fatalf("expected extractor status %s, got %s", tt.wantStatus, processed.ExtractorStatus)
+			}
+			if len(processed.Failures) != tt.wantFailures {
+				t.Fatalf("expected %d failures, got %d", tt.wantFailures, len(processed.Failures))
+			}
+		})
+	}
+
+	for _, status := range []model.RunStatus{
+		model.RunStatusPassed,
+		model.RunStatusFailed,
+		model.RunStatusTimedOut,
+		model.RunStatusKilled,
+	} {
+		t.Run("specialized parser miss after "+string(status), func(t *testing.T) {
+			t.Parallel()
+			run := model.RunOutput{
+				Status:   status,
+				Metadata: model.RunMetadata{Parser: "vitest"},
+			}
+			processed, err := Process([]byte("TypeError: boom\nsrc/foo.test.ts:42:13\n"), run, nil)
+			if err != nil {
+				t.Fatalf("Process failed: %v", err)
+			}
+			wantStatus := model.ExtractorStatusDegraded
+			if status == model.RunStatusPassed {
+				wantStatus = model.ExtractorStatusNoMatch
+			}
+			if processed.Status != status || processed.ExtractorStatus != wantStatus {
+				t.Fatalf("expected run/extractor status %s/%s, got %s/%s", status, wantStatus, processed.Status, processed.ExtractorStatus)
+			}
+			if len(processed.Failures) != 0 {
+				t.Fatalf("specialized parser miss used generic fallback: %+v", processed.Failures)
+			}
+		})
+	}
+}
+
 func TestProcessRuleAssistedExtraction(t *testing.T) {
 	t.Parallel()
 	raw := []byte("setup\nTypeError: boom\nsrc/foo.ts:99:7\n✗ renders empty state\n\nsummary\n")

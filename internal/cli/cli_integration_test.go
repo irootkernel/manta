@@ -895,6 +895,12 @@ func TestRawLogPersistsWhenExtractionFails(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("expected underlying failed exit code, got %d stderr=%s", exitCode, stderr.String())
 	}
+	if !strings.Contains(stdout.String(), "Status: failed") || !strings.Contains(stdout.String(), "Exit code: 1") {
+		t.Fatalf("expected failed result with original command exit, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "regex input bound") {
+		t.Fatalf("expected extraction diagnostic on stderr, got %q", stderr.String())
+	}
 	runsDir := filepath.Join(repo, ".kat", "runs")
 	entries, err := os.ReadDir(runsDir)
 	if err != nil || len(entries) != 1 {
@@ -919,6 +925,23 @@ func TestRawLogPersistsWhenExtractionFails(t *testing.T) {
 	}
 	if summary.Status != model.RunStatusFailed || summary.ExtractorStatus != model.ExtractorStatusDegraded {
 		t.Fatalf("expected failed/degraded summary, got status=%s extractor=%s", summary.Status, summary.ExtractorStatus)
+	}
+	if summary.ExitCode != 1 || summary.FailureCount != 0 || summary.WarningCount != 0 {
+		t.Fatalf("expected retained exit and empty compressed evidence, got exit=%d failures=%d warnings=%d", summary.ExitCode, summary.FailureCount, summary.WarningCount)
+	}
+	statusData, err := os.ReadFile(filepath.Join(runDir, "huge.status.json"))
+	if err != nil {
+		t.Fatalf("expected status json to be written with degraded extraction: %v", err)
+	}
+	var status model.Status
+	if err := json.Unmarshal(statusData, &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.Status != model.RunStatusFailed || status.ExitCode != 1 || status.ExtractorStatus != model.ExtractorStatusDegraded {
+		t.Fatalf("expected failed/degraded status, got status=%s exit=%d extractor=%s", status.Status, status.ExitCode, status.ExtractorStatus)
+	}
+	if status.StatusHash != artifacts.ComputeStatusHash(status) {
+		t.Fatalf("status hash mismatch: got %q", status.StatusHash)
 	}
 }
 

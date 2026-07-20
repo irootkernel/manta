@@ -1,6 +1,6 @@
 # KAT Requirement Specs
 
-Status: v0.1 baseline complete; hardening requirements in progress (`HARDE-001` through `HARDE-004` complete)
+Status: v0.1 baseline complete; hardening requirements in progress (`HARDE-001` through `HARDE-005` complete)
 Scope: KAT v0.1 standalone baseline and post-baseline hardening
 Source context: KAS v0.2 / KAH v0.2 / KAT v0.1 / GJC delegated execution SOT, with KAT kept independent from KAS and KAH for this repository setup.
 
@@ -57,8 +57,8 @@ Implementation note: the original v0.1 roadmap is implemented. Repository review
 - [x] `KAT-REQ-RQEXT-003` Extract bounded failure spans with start/end line and byte offsets.
 - [x] `KAT-REQ-RQEXT-004` Extract signature, file, line, test name, stack-top entries, and excerpt path when available.
 - [x] `KAT-REQ-RQEXT-005` Report `extractor_status` as `precise`, `partial`, `degraded`, or `no_match`.
-- [x] `KAT-REQ-RQEXT-006` Report degraded extraction when a command fails but no useful failure span is found.
-- [x] `KAT-REQ-RQEXT-007` Never use extraction rules to override command exit status.
+- [x] `KAT-REQ-RQEXT-006` Report degraded extraction when a failed, timed-out, or killed command has no useful failure span.
+- [x] `KAT-REQ-RQEXT-007` Never use extraction rules, parser matches, or parser misses to override the executed command's exit code or authoritative non-pass status.
 
 ## RQRUL: Rule lifecycle and CRUD
 
@@ -76,7 +76,7 @@ Implementation note: the original v0.1 roadmap is implemented. Repository review
 - [x] `KAT-REQ-RQSEC-002` Preserve raw logs as original evidence, clearly mark that they may contain unredacted data, and avoid treating them as share-safe artifacts.
 - [x] `KAT-REQ-RQSEC-003` Fail closed on malformed config, missing command definitions, invalid or unsupported regex, artifact-write failure, or unsupported parser configuration.
 - [x] `KAT-REQ-RQSEC-004` Bound extracted block size, excerpt size, summary size, and regex input size.
-- [x] `KAT-REQ-RQSEC-005` Avoid broad fallback behavior; when precision is not available, mark extraction as degraded.
+- [x] `KAT-REQ-RQSEC-005` Avoid broad fallback behavior; a specialized-parser miss reports `no_match` after a pass and `degraded` after a non-pass result, while an accepted span with missing key metadata remains `partial`.
 
 ## RQWAT: Watcher status compatibility
 
@@ -98,7 +98,7 @@ Implementation note: the original v0.1 roadmap is implemented. Repository review
 - [x] `KAT-REQ-RQHAR-002` Plan and open raw-log artifacts before command execution, handle operator interruption signals explicitly, forward termination to the child process, and preserve bounded partial raw/status evidence with an explicit non-pass state.
 - [x] `KAT-REQ-RQHAR-003` Allocate collision-free standalone run directories so repeated executions in the same timestamp interval never overwrite earlier raw, summary, status, or excerpt artifacts.
 - [x] `KAT-REQ-RQHAR-004` Apply configured redaction consistently to surfaced summary, status, excerpt, and console-safe command metadata while preserving original raw logs and usable literal artifact references unchanged.
-- [ ] `KAT-REQ-RQHAR-005` Define one fail-closed contract for specialized-parser misses and internal errors, align implementation and documentation to that contract, and test `precise`, `partial`, `degraded`, `no_match`, and any retained `internal_error` behavior.
+- [x] `KAT-REQ-RQHAR-005` Define one fail-closed contract for specialized-parser misses and internal errors, align implementation and documentation to that contract, and test `precise`, `partial`, `degraded`, `no_match`, and any retained `internal_error` behavior.
 - [ ] `KAT-REQ-RQHAR-006` Make every documented CLI option and example match executable behavior, including the disposition of `--verbose` and `--no-color`, self-contained rule examples, generated Markdown shape, and toolchain resolver/operator guidance.
 - [ ] `KAT-REQ-RQHAR-007` Add end-to-end regression coverage for artifact containment, symlink escape, interruption, collision resistance, redaction boundaries, parser/error-state behavior, CLI examples, and both standalone and `--run-id` layouts before declaring hardening complete.
 

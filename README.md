@@ -15,6 +15,8 @@ Implemented:
 Important behavior:
 - command exit status is authoritative for `run`
 - rules and parsers summarize evidence only; they never change pass/fail
+- specialized parsers fail closed without retrying generic extraction; a miss is `no_match` for a passing command and `degraded` for a non-pass result
+- an extraction internal error preserves an existing failed, timed-out, or killed result; after a passing command, artifacts retain command exit `0` with `status: internal_error` while KAT exits `4`
 - raw evidence is opened before execution and streamed while the command runs
 - on Unix, SIGINT/SIGTERM are forwarded to the command process group and recorded as `killed` with exit code `130`/`143`
 - raw logs are preserved as original evidence and may contain unredacted values

@@ -46,6 +46,8 @@ Implemented parser labels:
 - `go-test`
 - `playwright`
 
+Applicable project rules run before the selected parser. The `generic` label uses generic extraction patterns; specialized labels use only their own parser patterns and never retry generic extraction. A specialized-parser miss reports `no_match` after a pass and `degraded` after a non-pass result.
+
 Parser-specific examples in this repository are backed by fixture logs under `internal/extract/testdata/`.
 
 
@@ -161,6 +163,7 @@ kkachi-agent-tester rules propose --lane unit --parser vitest --raw-log internal
 - `summarize <raw-log>` uses the `generic` parser plus any matching project rules.
 - When only a raw log is available, KAT infers `command_id` and `lane` from the raw-log basename. For example, `unit.raw.log` produces `command_id: unit` and `lane: unit`.
 - Because original execution metadata is unavailable, summarize infers `status` and `exit_code` from raw-log evidence. Use `run` when authoritative execution metadata is required.
+- If extraction fails internally, summarize still preserves the copied raw log and writes degraded `internal_error` summary/status artifacts with exit code `4`; the diagnostic is emitted on stderr.
 - Without `--run-id` or `--output-dir`, summarize copies the input raw log into a newly allocated `.kat/runs/<UTC-timestamp>[-NNN]/` directory and writes derived artifacts there. `--output-dir` uses the same collision-free allocation under `<output-dir>/runs/`; `--run-id` retains the fixed Kkachi-compatible layout. The original input remains unchanged.
 - Each summarize operation stores a complete raw-log copy in its artifact directory, so repeated summarization increases local storage usage in proportion to the source log size.
 - Summary JSON stores excerpt references relative to the summary directory, such as `excerpts/F001.log`. An absolute `--summary` input remains valid, while absolute, traversal, cross-run, dangling, and symlink-escaping embedded references fail with artifact exit code `3`.
@@ -176,7 +179,10 @@ kkachi-agent-tester rules propose --lane unit --parser vitest --raw-log internal
 | Test command interrupted by SIGINT/SIGTERM on Unix | `130` / `143`, with `status: killed` |
 | KAT config error | documented internal code, recommended `2` |
 | KAT artifact write error | documented internal code, recommended `3` |
-| KAT parser/rule internal error | documented internal code, recommended `4` unless command itself failed first |
+| Extraction internal error after a passing test command | CLI `4`; artifacts retain command exit `0` with `status: internal_error` |
+| Extraction internal error after a failed, timed-out, or killed command | original command exit code and status |
+| Extraction internal error during `summarize` | CLI and artifact exit code `4` with `status: internal_error` |
+| Other KAT parser/rule internal error | documented internal code, recommended `4` |
 | Successful `summarize` or `excerpt` | `0` |
 
 ## Markdown summary shape

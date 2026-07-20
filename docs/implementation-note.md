@@ -1,6 +1,6 @@
 # KAT Implementation Note
 
-Status: v0.1 baseline complete; HARDE hardening in progress (`HARDE-001` through `HARDE-004` complete)
+Status: v0.1 baseline complete; HARDE hardening in progress (`HARDE-001` through `HARDE-005` complete)
 Scope: Guidance for implementing complex KAT v0.1 and post-baseline hardening areas without KAS/KAH dependency
 
 ## Implementation posture
@@ -65,7 +65,7 @@ Current supported parser labels:
 - `go-test`
 - `playwright`
 
-Generic extraction remains the fallback, but parser-specific extraction is now implemented for fixture-backed Vitest, Pytest, Go test, and Playwright logs.
+Generic extraction is used only for the `generic` parser label. Fixture-backed Vitest, Pytest, Go test, and Playwright parsers fail closed when their own patterns do not match; they do not retry generic extraction.
 
 Recommended generic patterns still matter for unknown output shapes:
 
@@ -82,10 +82,12 @@ Span bounds:
 
 Extractor status guidance:
 
-- `precise`: one or more bounded spans with useful signature and likely location.
-- `partial`: spans exist but key metadata is missing.
-- `degraded`: command failed but spans are missing or too broad.
-- `no_match`: command passed or no relevant failure/warning evidence exists.
+- `precise`: every accepted failure span has a file or test name.
+- `partial`: at least one accepted failure span has neither a file nor a test name.
+- `degraded`: a failed, timed-out, or killed command has no accepted failure span, or extraction failed internally.
+- `no_match`: a passing command has no accepted failure span and extraction completed without an internal error; warnings may still be present.
+
+Extraction internal errors follow the artifact/CLI matrix in `architecture.md`. When artifact writes remain safe, KAT preserves raw evidence and materializes empty degraded evidence; bounded, redacted diagnostics go to stderr rather than the JSON schemas.
 
 ## Fixture-backed parser examples
 
@@ -178,6 +180,8 @@ Tests should cover:
 - Traversal, cross-run excerpt access, dangling links, and external symlink escape failing closed across artifact and rule operations.
 - Internal symlinks whose canonical targets remain inside the applicable boundary continuing to work.
 - Specialized parser fixtures for `vitest`, `pytest`, `go-test`, and `playwright`.
+- Specialized parser misses with generic-looking markers, covering `no_match` for pass and `degraded` for failed, timed-out, and killed states without generic fallback, including a built-binary E2E probe.
+- Extraction internal errors after pass, failure, timeout, kill, and standalone summarize, including built-binary run/summarize probes for preserved raw evidence, summary/status hashes, Markdown output, and CLI exit behavior.
 
 ## Release-readiness checklist
 
