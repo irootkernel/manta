@@ -251,21 +251,28 @@ func executeRun(req model.RunRequest) (runResult, int, error) {
 		return runResult{}, 0, err
 	}
 
-	runOutput, err := runner.Execute(context.Background(), req.RepoRoot, commandID, lane, parser, argv, timeoutSec)
-	if err != nil {
-		return runResult{}, 0, err
-	}
-
 	if err := artifacts.EnsureParents(paths); err != nil {
 		return runResult{}, 0, err
 	}
-	rawSHA, err := artifacts.WriteRawLog(paths, runOutput.RawLogBytes)
+	rawFile, err := artifacts.OpenRawLog(paths)
 	if err != nil {
 		return runResult{}, 0, err
 	}
+	runOutput, runErr := runner.Execute(context.Background(), req.RepoRoot, commandID, lane, parser, argv, timeoutSec, rawFile)
+	closeErr := rawFile.Close()
+	if closeErr != nil {
+		return runResult{}, 0, model.NewKATError(model.ExitCodeArtifactError, "close raw log", closeErr)
+	}
+	if runErr != nil {
+		return runResult{}, 0, runErr
+	}
+	if err := artifacts.ValidateRawLog(paths); err != nil {
+		return runResult{}, 0, err
+	}
+	rawSHA := artifacts.SHA256(runOutput.RawLogBytes)
 	relRaw := artifacts.Rel(req.RepoRoot, paths.RawLogPath)
 
-	result, processed, err := materializeArtifacts(req, cfg, paths, commandID, lane, parser, argv, rawSHA, relRaw, runOutput, applicableRules)
+	result, processed, err := materializeArtifacts(req, cfg, paths, rawSHA, relRaw, runOutput, applicableRules)
 	if err != nil {
 		return runResult{}, 0, err
 	}
@@ -311,14 +318,14 @@ func executeSummarize(req model.RunRequest, rawLogArg string) (runResult, error)
 		Status:      status,
 		RawLogBytes: raw,
 	}
-	result, _, err := materializeArtifacts(req, cfg, paths, commandID, lane, parser, []string{}, rawSHA, relRaw, runOutput, applicableRules)
+	result, _, err := materializeArtifacts(req, cfg, paths, rawSHA, relRaw, runOutput, applicableRules)
 	if err != nil {
 		return runResult{}, err
 	}
 	return result, nil
 }
 
-func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.ArtifactPaths, commandID, lane, parser string, argv []string, rawSHA, relRaw string, runOutput model.RunOutput, applicableRules []model.Rule) (runResult, model.RunOutput, error) {
+func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.ArtifactPaths, rawSHA, relRaw string, runOutput model.RunOutput, applicableRules []model.Rule) (runResult, model.RunOutput, error) {
 	runOutput, err := extract.Process(runOutput.RawLogBytes, runOutput, applicableRules)
 	if err != nil {
 		if runOutput.Status == model.RunStatusFailed || runOutput.Status == model.RunStatusTimedOut || runOutput.Status == model.RunStatusKilled {
@@ -329,17 +336,18 @@ func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.Ar
 			return runResult{}, model.RunOutput{}, err
 		}
 	}
+	metadata := runOutput.Metadata
 
 	summary := model.Summary{
 		Status:          runOutput.Status,
-		CommandID:       commandID,
-		Lane:            lane,
-		Parser:          parser,
-		CommandArgv:     argv,
-		ExitCode:        runOutput.Metadata.ExitCode,
-		StartedAt:       runOutput.Metadata.StartedAt,
-		EndedAt:         runOutput.Metadata.EndedAt,
-		DurationMS:      runOutput.Metadata.DurationMS,
+		CommandID:       metadata.CommandID,
+		Lane:            metadata.Lane,
+		Parser:          metadata.Parser,
+		CommandArgv:     metadata.CommandArgv,
+		ExitCode:        metadata.ExitCode,
+		StartedAt:       metadata.StartedAt,
+		EndedAt:         metadata.EndedAt,
+		DurationMS:      metadata.DurationMS,
 		RawLog:          relRaw,
 		RawLogSHA256:    rawSHA,
 		ExtractorStatus: runOutput.ExtractorStatus,
@@ -363,9 +371,9 @@ func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.Ar
 	}
 	statusDoc := model.Status{
 		Status:            runOutput.Status,
-		CommandID:         commandID,
-		Lane:              lane,
-		ExitCode:          runOutput.Metadata.ExitCode,
+		CommandID:         metadata.CommandID,
+		Lane:              metadata.Lane,
+		ExitCode:          metadata.ExitCode,
 		ExtractorStatus:   runOutput.ExtractorStatus,
 		SummaryPath:       artifacts.Rel(req.RepoRoot, paths.SummaryJSON),
 		SummarySHA256:     summarySHA,
@@ -381,10 +389,10 @@ func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.Ar
 	}
 
 	result := runResult{
-		Command:    commandID,
+		Command:    metadata.CommandID,
 		Status:     runOutput.Status,
-		ExitCode:   runOutput.Metadata.ExitCode,
-		DurationMS: runOutput.Metadata.DurationMS,
+		ExitCode:   metadata.ExitCode,
+		DurationMS: metadata.DurationMS,
 		Summary:    artifacts.Rel(req.RepoRoot, paths.SummaryMD),
 		StatusJSON: artifacts.Rel(req.RepoRoot, paths.StatusJSON),
 		RawLog:     relRaw,

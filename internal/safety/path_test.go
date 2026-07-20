@@ -54,6 +54,32 @@ func TestPathOperationsWithinRoot(t *testing.T) {
 	}
 }
 
+func TestOpenFileWithinStreamsToContainedPath(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := filepath.Join(root, "nested", "evidence.log")
+	if err := MkdirAllWithin(root, filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	file, err := OpenFileWithin(root, path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.WriteString("partial evidence\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "partial evidence\n" {
+		t.Fatalf("unexpected content %q", data)
+	}
+}
+
 func TestPathOperationsAllowInternalSymlink(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

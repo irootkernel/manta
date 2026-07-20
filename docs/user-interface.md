@@ -168,6 +168,7 @@ kkachi-agent-tester rules propose --lane unit --parser vitest --raw-log internal
 | Test command passed | `0` |
 | Test command failed | underlying command exit code when available |
 | Test command timed out | documented timeout code, recommended `124` |
+| Test command interrupted by SIGINT/SIGTERM on Unix | `130` / `143`, with `status: killed` |
 | KAT config error | documented internal code, recommended `2` |
 | KAT artifact write error | documented internal code, recommended `3` |
 | KAT parser/rule internal error | documented internal code, recommended `4` unless command itself failed first |

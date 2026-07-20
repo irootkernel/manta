@@ -58,13 +58,15 @@ CLI
 2. CLI resolves repository root and config path.
 3. Config loader validates `.kkachi/tester.yaml`.
 4. Command registry resolves `unit` to command argv / lane / parser / timeout.
-5. Runner executes the command in the selected working directory.
-6. Raw stdout/stderr are captured and written to a raw log artifact.
-7. Extraction engine reads raw log and applies the selected parser plus project rules.
+5. Artifact writer opens the contained raw log before command execution.
+6. Runner executes the command in the selected working directory and streams stdout/stderr into the raw log.
+7. CLI closes and validates the contained raw log, then the extraction engine processes the captured raw bytes with the selected parser plus project rules.
 8. Redactor and noise filters shape surfaced artifacts.
 9. Artifact writer writes summary JSON, summary Markdown, excerpts, and status JSON.
 10. CLI exits with the underlying test command status or a documented KAT internal error code.
 ```
+
+On Unix, the runner starts the command in its own process group. SIGINT and SIGTERM are forwarded to the group, with a two-second grace period before remaining members are force-killed. Interrupted runs retain partial raw evidence, produce `status: killed`, and use the process-compatible exit codes `130` and `143` respectively.
 
 ## Data flow: summarize existing raw log
 

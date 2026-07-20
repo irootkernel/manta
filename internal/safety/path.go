@@ -53,6 +53,22 @@ func WriteFileWithin(rootPath, targetPath string, data []byte, perm os.FileMode)
 	return root.WriteFile(relative, data, perm)
 }
 
+func OpenFileWithin(rootPath, targetPath string, flag int, perm os.FileMode) (*os.File, error) {
+	root, relative, err := openResolvedRoot(rootPath, targetPath, flag&os.O_CREATE != 0)
+	if err != nil {
+		return nil, err
+	}
+	file, openErr := root.OpenFile(relative, flag, perm)
+	closeErr := root.Close()
+	if openErr != nil {
+		return nil, errors.Join(openErr, closeErr)
+	}
+	if closeErr != nil {
+		return nil, errors.Join(closeErr, file.Close())
+	}
+	return file, nil
+}
+
 func StatWithin(rootPath, targetPath string) (info os.FileInfo, err error) {
 	root, relative, err := openResolvedRoot(rootPath, targetPath, false)
 	if err != nil {

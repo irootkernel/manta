@@ -1,6 +1,6 @@
 # KAT Implementation Note
 
-Status: v0.1 baseline complete; HARDE hardening in progress (`HARDE-001` complete)
+Status: v0.1 baseline complete; HARDE hardening in progress (`HARDE-001` and `HARDE-002` complete)
 Scope: Guidance for implementing complex KAT v0.1 and post-baseline hardening areas without KAS/KAH dependency
 
 ## Implementation posture
@@ -36,8 +36,11 @@ internal/safety/
 - Store and pass command configuration as argv arrays, not shell strings.
 - In Go, prefer direct process execution over shell invocation for configured commands.
 - Capture stdout and stderr ordering when the selected approach makes that practical. If perfect ordering is not possible, document the limitation and preserve both streams clearly.
-- Store command metadata with the raw log: command argv, working directory, start time, end time, duration, exit code, timeout, and interruption state.
+- Record command argv, command ID, lane, parser, start time, end time, duration, exit code, and execution status in derived artifacts; the raw log itself contains only original stdout/stderr evidence.
 - Timeout must not become pass. Emit `timed_out` and preserve partial logs.
+- Open the contained raw-log artifact before starting the command and stream stdout/stderr into it during execution.
+- On Unix, run the command in its own process group, forward SIGINT/SIGTERM to that group, allow a two-second grace period, then force-kill remaining group members.
+- Record operator interruption as `killed` with the process-compatible `128 + signal` exit code (`130` for SIGINT and `143` for SIGTERM).
 - Prefer explicit internal errors for config/artifact failures instead of silently falling back to a different output path.
 
 ## Artifact writer guidance
@@ -162,6 +165,7 @@ Tests should cover:
 - Failing command with obvious error span.
 - Failing command with no parser match, producing degraded extraction.
 - Timeout with partial log.
+- Built-binary SIGINT and SIGTERM handling on Unix across standalone and `--run-id` layouts, including process-group forwarding, partial raw evidence, `killed` status, and exit codes `130` and `143`.
 - Redaction in summary and excerpts.
 - Noise filtering in summary while raw log remains unchanged.
 - Rule test with expected span.
@@ -180,6 +184,7 @@ Before tagging `v0.1.3`, verify all of the following:
 - `make test`
 - configured run smoke test
 - ad-hoc run smoke test
+- built-binary SIGINT/SIGTERM interruption smoke across standalone and `--run-id` layouts, including partial raw evidence, `killed` status, and exit codes `130` and `143`
 - summarize smoke test from an existing raw log
 - parser fixture coverage for `generic`, `vitest`, `pytest`, `go-test`, and `playwright`
 - rule lifecycle coverage for `list/search/show/create/update/delete/test/propose`

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -66,6 +67,25 @@ func WriteRawLog(paths model.ArtifactPaths, raw []byte) (string, error) {
 		return "", err
 	}
 	return SHA256(raw), nil
+}
+
+func OpenRawLog(paths model.ArtifactPaths) (*os.File, error) {
+	file, err := safety.OpenFileWithin(paths.BoundaryDir, paths.RawLogPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	if err != nil {
+		return nil, model.NewKATError(model.ExitCodeArtifactError, "open raw log", err)
+	}
+	return file, nil
+}
+
+func ValidateRawLog(paths model.ArtifactPaths) error {
+	info, err := safety.StatWithin(paths.BoundaryDir, paths.RawLogPath)
+	if err != nil {
+		return model.NewKATError(model.ExitCodeArtifactError, "validate raw log", err)
+	}
+	if !info.Mode().IsRegular() {
+		return model.NewKATError(model.ExitCodeArtifactError, "validate raw log", fmt.Errorf("raw log is not a regular file"))
+	}
+	return nil
 }
 
 func WriteSummaryJSON(paths model.ArtifactPaths, summary model.Summary) (string, error) {

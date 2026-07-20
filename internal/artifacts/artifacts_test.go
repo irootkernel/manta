@@ -35,6 +35,47 @@ func TestWriteSummaryJSONFailsWhenTooLarge(t *testing.T) {
 	}
 }
 
+func TestOpenRawLogCreatesEvidenceBeforeCompletion(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	paths, err := PlanPaths(repo, "", "run-001", "unit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureParents(paths); err != nil {
+		t.Fatal(err)
+	}
+	file, err := OpenRawLog(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(paths.RawLogPath); err != nil {
+		t.Fatalf("expected raw log to exist before command execution: %v", err)
+	}
+	if _, err := file.WriteString("started\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateRawLog(paths); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(paths.RawLogPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != "started\n" {
+		t.Fatalf("unexpected raw evidence %q", raw)
+	}
+	if err := os.Remove(paths.RawLogPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateRawLog(paths); model.ExitCodeFor(err) != int(model.ExitCodeArtifactError) {
+		t.Fatalf("expected missing raw log to fail validation, got %v", err)
+	}
+}
+
 func TestPlanPathsRejectsUnsafeIdentifiers(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
@@ -204,6 +245,12 @@ func TestArtifactWriteRejectsFinalFileSymlinkEscape(t *testing.T) {
 	}
 	if _, err := WriteRawLog(paths, []byte("escaped\n")); model.ExitCodeFor(err) != int(model.ExitCodeArtifactError) {
 		t.Fatalf("expected artifact error for final file symlink, got %v", err)
+	}
+	if _, err := OpenRawLog(paths); model.ExitCodeFor(err) != int(model.ExitCodeArtifactError) {
+		t.Fatalf("expected raw open error for final file symlink, got %v", err)
+	}
+	if err := ValidateRawLog(paths); model.ExitCodeFor(err) != int(model.ExitCodeArtifactError) {
+		t.Fatalf("expected raw validation error for final file symlink, got %v", err)
 	}
 	data, err := os.ReadFile(externalPath)
 	if err != nil {

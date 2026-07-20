@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/artifacts"
 	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
 )
 
@@ -142,6 +143,106 @@ func TestUnsafeRunIDFailsBeforeCommandExecution(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(repo, "command-ran")); !os.IsNotExist(err) {
 		t.Fatalf("expected command not to execute, stat error=%v", err)
+	}
+}
+
+func TestRawLogOpenFailurePreventsCommandExecution(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	writeMarkerCommandConfig(t, repo, "unit")
+	base := filepath.Join(repo, ".kkachi", "runs", "run-001", "artifacts", "test")
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	external := filepath.Join(t.TempDir(), "outside.log")
+	if err := os.WriteFile(external, []byte("unchanged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(external, filepath.Join(base, "unit.raw.log")); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	exitCode := Main([]string{"--repo", repo, "--run-id", "run-001", "run", "unit"}, &stdout, &stderr)
+	if exitCode != int(model.ExitCodeArtifactError) {
+		t.Fatalf("expected artifact exit code, got %d stderr=%s", exitCode, stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(repo, "command-ran")); !os.IsNotExist(err) {
+		t.Fatalf("expected command not to execute, stat error=%v", err)
+	}
+	data, err := os.ReadFile(external)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "unchanged\n" {
+		t.Fatalf("external raw target changed: %q", data)
+	}
+}
+
+func TestTimeoutPreservesPartialArtifacts(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".kkachi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configText := strings.Join([]string{
+		"version: 1",
+		"commands:",
+		"  timeout:",
+		"    command: [\"sh\", \"timeout.sh\"]",
+		"    lane: unit",
+		"    parser: generic",
+		"    timeout_sec: 1",
+	}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\necho started\nsleep 30\necho finished\n"
+	if err := os.WriteFile(filepath.Join(repo, "timeout.sh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	exitCode := Main([]string{"--repo", repo, "--run-id", "timeout-run", "run", "timeout"}, &stdout, &stderr)
+	if exitCode != int(model.ExitCodeTimeout) {
+		t.Fatalf("expected timeout exit code %d, got %d stderr=%s", model.ExitCodeTimeout, exitCode, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Status: timed_out") {
+		t.Fatalf("expected timed_out console result, got %q", stdout.String())
+	}
+
+	base := filepath.Join(repo, ".kkachi", "runs", "timeout-run", "artifacts", "test")
+	raw, err := os.ReadFile(filepath.Join(base, "timeout.raw.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "started\n") || strings.Contains(string(raw), "finished\n") {
+		t.Fatalf("expected partial raw evidence, got %q", raw)
+	}
+	var summary model.Summary
+	summaryData, err := os.ReadFile(filepath.Join(base, "timeout.summary.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(summaryData, &summary); err != nil {
+		t.Fatal(err)
+	}
+	var status model.Status
+	statusData, err := os.ReadFile(filepath.Join(base, "timeout.status.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(statusData, &status); err != nil {
+		t.Fatal(err)
+	}
+	wantSHA := artifacts.SHA256(raw)
+	if summary.Status != model.RunStatusTimedOut || summary.ExitCode != int(model.ExitCodeTimeout) {
+		t.Fatalf("expected timed_out summary, got status=%s exit=%d", summary.Status, summary.ExitCode)
+	}
+	if status.Status != model.RunStatusTimedOut || status.ExitCode != int(model.ExitCodeTimeout) {
+		t.Fatalf("expected timed_out status, got status=%s exit=%d", status.Status, status.ExitCode)
+	}
+	if summary.RawLogSHA256 != wantSHA || status.RawLogSHA256 != wantSHA {
+		t.Fatalf("raw checksum mismatch: summary=%s status=%s actual=%s", summary.RawLogSHA256, status.RawLogSHA256, wantSHA)
 	}
 }
 

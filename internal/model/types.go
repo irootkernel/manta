@@ -213,8 +213,6 @@ type RunOutput struct {
 	RawLogBytes     []byte
 	Failures        []Failure
 	Warnings        []Warning
-	TimedOut        bool
-	Killed          bool
 }
 
 type RuleTestResult struct {
