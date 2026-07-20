@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -42,5 +43,25 @@ func TestVersionJSONOutput(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestUnsupportedGlobalOptionsFailClosed(t *testing.T) {
+	for _, option := range []string{"--verbose", "--no-color"} {
+		t.Run(option, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+
+			exitCode := Main([]string{option, "--version"}, &stdout, &stderr)
+			if exitCode != 2 {
+				t.Fatalf("exitCode = %d, want 2", exitCode)
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("stdout = %q, want empty", stdout.String())
+			}
+			if !strings.Contains(stderr.String(), "flag provided but not defined") {
+				t.Fatalf("stderr = %q, want unsupported-option diagnostic", stderr.String())
+			}
+		})
 	}
 }

@@ -170,6 +170,32 @@ func TestCreateSearchAndDeleteRule(t *testing.T) {
 	}
 }
 
+func TestUpdateRulePersistsChanges(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	rule := validRule("generic-v1")
+	if _, err := Create(repo, rule); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	rule.Confidence = "high"
+	rule.Provenance.Reason = "fixture-backed rule updated"
+	updated, err := Update(repo, rule.ID, rule)
+	if err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+	if updated.Confidence != "high" || updated.Provenance.Reason != "fixture-backed rule updated" {
+		t.Fatalf("Update returned stale rule: %+v", updated)
+	}
+	reloaded, err := LoadByID(repo, rule.ID)
+	if err != nil {
+		t.Fatalf("LoadByID failed: %v", err)
+	}
+	if reloaded.Confidence != "high" || reloaded.Provenance.Reason != "fixture-backed rule updated" {
+		t.Fatalf("updated fields were not persisted: %+v", reloaded)
+	}
+}
+
 func TestCreateRejectsUnsafeRuleIDs(t *testing.T) {
 	t.Parallel()
 	for _, id := range []string{"../generic", "/tmp/generic", "nested/generic", ".", "규칙"} {

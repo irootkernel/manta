@@ -1,6 +1,6 @@
 # KAT Requirement Specs
 
-Status: v0.1 baseline complete; hardening requirements in progress (`HARDE-001` through `HARDE-005` complete)
+Status: v0.1 baseline complete; hardening requirements in progress (`HARDE-001` through `HARDE-006` complete)
 Scope: KAT v0.1 standalone baseline and post-baseline hardening
 Source context: KAS v0.2 / KAH v0.2 / KAT v0.1 / GJC delegated execution SOT, with KAT kept independent from KAS and KAH for this repository setup.
 
@@ -99,7 +99,7 @@ Implementation note: the original v0.1 roadmap is implemented. Repository review
 - [x] `KAT-REQ-RQHAR-003` Allocate collision-free standalone run directories so repeated executions in the same timestamp interval never overwrite earlier raw, summary, status, or excerpt artifacts.
 - [x] `KAT-REQ-RQHAR-004` Apply configured redaction consistently to surfaced summary, status, excerpt, and console-safe command metadata while preserving original raw logs and usable literal artifact references unchanged.
 - [x] `KAT-REQ-RQHAR-005` Define one fail-closed contract for specialized-parser misses and internal errors, align implementation and documentation to that contract, and test `precise`, `partial`, `degraded`, `no_match`, and any retained `internal_error` behavior.
-- [ ] `KAT-REQ-RQHAR-006` Make every documented CLI option and example match executable behavior, including the disposition of `--verbose` and `--no-color`, self-contained rule examples, generated Markdown shape, and toolchain resolver/operator guidance.
+- [x] `KAT-REQ-RQHAR-006` Make every documented CLI option and example match executable behavior, including the disposition of `--verbose` and `--no-color`, self-contained rule examples, generated Markdown shape, and toolchain resolver/operator guidance.
 - [ ] `KAT-REQ-RQHAR-007` Add end-to-end regression coverage for artifact containment, symlink escape, interruption, collision resistance, redaction boundaries, parser/error-state behavior, CLI examples, and both standalone and `--run-id` layouts before declaring hardening complete.
 
 ## Out of scope for v0.1 standalone setup

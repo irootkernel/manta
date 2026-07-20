@@ -90,8 +90,6 @@ type RunRequest struct {
 	OutputDir  string
 	RunID      string
 	JSON       bool
-	NoColor    bool
-	Verbose    bool
 
 	Mode        RunMode
 	CommandID   string

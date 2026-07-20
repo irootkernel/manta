@@ -29,11 +29,19 @@ Important behavior:
 go build .
 go install github.com/SeventeenthEarth/kkachi-agent-tester@v0.1.3
 make install
-make install-toolchain
+VERSION=0.1.3 make install-toolchain
 kkachi-agent-tester --version
 ```
 
 `make install` installs the binary with embedded build metadata from a checkout. `make install-toolchain` installs a versioned toolchain copy under `~/.local/kkachi/toolchains/kat/v0.1.3/bin/`.
+
+For deterministic operator and automation use, resolve an explicit binary with the bundled wrapper:
+
+```bash
+KKACHI_KAT_BIN=/absolute/path/to/kkachi-agent-tester scripts/kkachi-agent-tester-toolchain --toolchain-status
+```
+
+The resolver does not fall back to `PATH`. It selects `KKACHI_KAT_BIN` first, then `.kkachi/toolchain.yaml` `kat.binary_path`, then the versioned path selected by `kat.cli_version`. Metadata-selected binaries are checked against `kat.cli_version`; missing, relative, non-executable, or version-mismatched selections fail closed. KAS/KAH-generated local metadata may not contain a `kat` entry, in which case set `KKACHI_KAT_BIN` or add explicit local KAT metadata. See [the user interface guide](docs/user-interface.md#version-and-toolchain-selection) for metadata examples.
 
 ## Verify
 
@@ -89,6 +97,8 @@ Run-local proposed rules are kept separate under:
 
 ## Quick examples
 
+These commands assume the self-contained fixture from [the user interface guide](docs/user-interface.md#tested-setup-fixture). Configured and ad-hoc fixture runs intentionally exit `1` because the fixture represents a failing test.
+
 Configured run:
 
 ```bash
@@ -116,10 +126,14 @@ kkachi-agent-tester excerpt --summary .kkachi/runs/summarize-example/artifacts/t
 Rule lifecycle:
 
 ```bash
+kkachi-agent-tester rules create --file fixtures/generic-v1.yaml
 kkachi-agent-tester rules list
+kkachi-agent-tester rules search fixture-backed
 kkachi-agent-tester rules show generic-v1
-kkachi-agent-tester rules test --rule generic-v1 --log internal/extract/testdata/vitest.raw.log --expect-span 7:14
-kkachi-agent-tester rules propose --lane unit --parser vitest --raw-log internal/extract/testdata/vitest.raw.log --span 7:9
+kkachi-agent-tester rules test --rule generic-v1 --log fixtures/unit.raw.log --expect-span 2:5
+kkachi-agent-tester rules update generic-v1 --file fixtures/generic-v1-update.yaml
+kkachi-agent-tester rules propose --lane unit --parser generic --raw-log fixtures/unit.raw.log --span 2:4
+kkachi-agent-tester rules delete generic-v1 --reason "superseded by v2"
 ```
 
 ## Artifact layouts

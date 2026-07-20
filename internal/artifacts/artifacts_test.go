@@ -177,6 +177,63 @@ func TestWriteSummaryJSONFailsWhenTooLarge(t *testing.T) {
 	}
 }
 
+func TestWriteSummaryMarkdownMatchesDocumentedShape(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "unit.summary.md")
+	paths := model.ArtifactPaths{BoundaryDir: dir, SummaryMD: path}
+	summary := model.Summary{
+		Status:          model.RunStatusFailed,
+		CommandID:       "unit",
+		ExitCode:        1,
+		RawLog:          ".kkachi/runs/summarize-example/artifacts/test/unit.raw.log",
+		RawLogSHA256:    "sha256:abc",
+		ExtractorStatus: model.ExtractorStatusPrecise,
+		Failures: []model.Failure{{
+			ID:        "F001",
+			Signature: "TypeError: token=<redacted> failed",
+			File:      "src/foo.test.ts",
+			Line:      42,
+			TestName:  "renders empty state",
+			Excerpt:   "excerpts/F001.log",
+		}},
+	}
+
+	if err := WriteSummaryMarkdown(paths, summary); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Join([]string{
+		"# KAT Summary: unit",
+		"",
+		"Status: failed",
+		"Exit code: 1",
+		"Duration: 0.0s",
+		"Extractor: precise",
+		"Raw log: .kkachi/runs/summarize-example/artifacts/test/unit.raw.log",
+		"Raw log SHA-256: sha256:abc",
+		"",
+		"## Failures",
+		"",
+		"### F001: TypeError: token=<redacted> failed",
+		"",
+		"- File: src/foo.test.ts:42",
+		"- Test: renders empty state",
+		"- Excerpt: excerpts/F001.log",
+		"",
+		"## Notes",
+		"",
+		"Command exit code is authoritative. Extraction rules only summarize evidence.",
+		"",
+	}, "\n")
+	if got := string(data); got != want {
+		t.Fatalf("markdown mismatch\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestOpenRawLogCreatesEvidenceBeforeCompletion(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()

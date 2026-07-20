@@ -1,6 +1,6 @@
 # KAT Implementation Note
 
-Status: v0.1 baseline complete; HARDE hardening in progress (`HARDE-001` through `HARDE-005` complete)
+Status: v0.1 baseline complete; HARDE hardening in progress (`HARDE-001` through `HARDE-006` complete)
 Scope: Guidance for implementing complex KAT v0.1 and post-baseline hardening areas without KAS/KAH dependency
 
 ## Implementation posture
@@ -182,6 +182,9 @@ Tests should cover:
 - Specialized parser fixtures for `vitest`, `pytest`, `go-test`, and `playwright`.
 - Specialized parser misses with generic-looking markers, covering `no_match` for pass and `degraded` for failed, timed-out, and killed states without generic fallback, including a built-binary E2E probe.
 - Extraction internal errors after pass, failure, timeout, kill, and standalone summarize, including built-binary run/summarize probes for preserved raw evidence, summary/status hashes, Markdown output, and CLI exit behavior.
+- Exact generated Markdown shape for a fixed summary, plus a built-binary fresh-fixture workflow covering version, configured/ad-hoc run, summarize, excerpt, JSON output, and the complete rule lifecycle.
+- Unsupported historical `--verbose` and `--no-color` placeholders failing closed with config exit code `2`.
+- Toolchain resolver selection from `KKACHI_KAT_BIN`, absolute `kat.binary_path`, and versioned `kat.cli_version`, including argument forwarding and fail-closed missing, unsafe, or mismatched selections.
 
 ## Release-readiness checklist
 
@@ -195,6 +198,8 @@ Before tagging `v0.1.3`, verify all of the following:
 - summarize smoke test from an existing raw log
 - parser fixture coverage for `generic`, `vitest`, `pytest`, `go-test`, and `playwright`
 - rule lifecycle coverage for `list/search/show/create/update/delete/test/propose`
+- fresh-fixture execution of every documented KAT CLI command with generated Markdown compared to the documented shape
+- toolchain resolver status and forwarding checks for environment, absolute-path metadata, and versioned metadata selection
 - artifact path and containment verification for `.kat/`, `--output-dir`, and `.kkachi/runs/<run_id>/...`
 - collision checks confirming repeated standalone operations retain distinct raw, summary, Markdown, status, and excerpt artifacts with unchanged raw-log checksums
 - watcher status JSON compatibility, including status-hash inputs

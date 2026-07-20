@@ -16,11 +16,13 @@ func TestToolchainScriptStatusWithEnvBinary(t *testing.T) {
 	repo := t.TempDir()
 	canonicalRepo := canonicalPath(t, repo)
 	bin := writeFakeKAT(t, t.TempDir(), "0.1.3")
+	writeToolchainMetadata(t, repo, `schema_version: "kkachi.toolchain.v1"
+kat:
+  cli_version: "9.9.9"
+  binary_path: "relative-metadata-binary"
+`)
 
-	cmd := exec.Command(python, filepath.Join(root, "scripts", "kkachi-agent-tester-toolchain"), "--toolchain-status")
-	cmd.Dir = repo
-	cmd.Env = append(os.Environ(), "KKACHI_PROJECT_ROOT="+repo, "KKACHI_KAT_BIN="+bin)
-	out, err := cmd.CombinedOutput()
+	out, err := runToolchainScript(python, root, repo, append(os.Environ(), "KKACHI_PROJECT_ROOT="+repo, "KKACHI_KAT_BIN="+bin), "--toolchain-status")
 	if err != nil {
 		t.Fatalf("toolchain status failed: %v\n%s", err, string(out))
 	}
@@ -50,16 +52,42 @@ kat:
   cli_version: "0.1.3"
 `)
 
-	cmd := exec.Command(python, filepath.Join(root, "scripts", "kkachi-agent-tester-toolchain"), "--toolchain-status")
-	cmd.Dir = repo
-	cmd.Env = append(os.Environ(), "KKACHI_PROJECT_ROOT="+repo, "KKACHI_TOOLCHAIN_ROOT="+toolchainRoot)
-	out, err := cmd.CombinedOutput()
+	out, err := runToolchainScript(python, root, repo, append(os.Environ(), "KKACHI_PROJECT_ROOT="+repo, "KKACHI_TOOLCHAIN_ROOT="+toolchainRoot), "--toolchain-status")
 	if err != nil {
 		t.Fatalf("toolchain status failed: %v\n%s", err, string(out))
 	}
 	output := string(out)
 	for _, want := range []string{
 		"kat_version_source=kat.cli_version",
+		"kat_cli_version=v0.1.3",
+		"kat_version_output=kkachi-agent-tester 0.1.3",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("status output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestToolchainScriptStatusWithAbsoluteBinaryMetadata(t *testing.T) {
+	t.Parallel()
+	python := requirePython3(t)
+	root := projectRoot(t)
+	repo := t.TempDir()
+	bin := writeFakeKAT(t, t.TempDir(), "0.1.3")
+	writeToolchainMetadata(t, repo, `schema_version: "kkachi.toolchain.v1"
+kat:
+  cli_version: "0.1.3"
+  binary_path: "`+bin+`"
+`)
+
+	out, err := runToolchainScript(python, root, repo, withoutKATEnv(os.Environ(), repo), "--toolchain-status")
+	if err != nil {
+		t.Fatalf("toolchain status failed: %v\n%s", err, string(out))
+	}
+	output := string(out)
+	for _, want := range []string{
+		"kat_bin=" + bin,
+		"kat_version_source=kat.binary_path",
 		"kat_cli_version=v0.1.3",
 		"kat_version_output=kkachi-agent-tester 0.1.3",
 	} {
@@ -77,10 +105,7 @@ func TestToolchainScriptForwardsArguments(t *testing.T) {
 	canonicalRepo := canonicalPath(t, repo)
 	bin := writeFakeKAT(t, t.TempDir(), "0.1.3")
 
-	cmd := exec.Command(python, filepath.Join(root, "scripts", "kkachi-agent-tester-toolchain"), "run", "--lane", "unit", "--", "echo", "ok")
-	cmd.Dir = repo
-	cmd.Env = append(os.Environ(), "KKACHI_PROJECT_ROOT="+repo, "KKACHI_KAT_BIN="+bin)
-	out, err := cmd.CombinedOutput()
+	out, err := runToolchainScript(python, root, repo, append(os.Environ(), "KKACHI_PROJECT_ROOT="+repo, "KKACHI_KAT_BIN="+bin), "run", "--lane", "unit", "--", "echo", "ok")
 	if err != nil {
 		t.Fatalf("toolchain forwarding failed: %v\n%s", err, string(out))
 	}
@@ -104,10 +129,7 @@ func TestToolchainScriptFailsClosed(t *testing.T) {
 	t.Run("missing source", func(t *testing.T) {
 		t.Parallel()
 		repo := t.TempDir()
-		cmd := exec.Command(python, filepath.Join(root, "scripts", "kkachi-agent-tester-toolchain"), "--toolchain-status")
-		cmd.Dir = repo
-		cmd.Env = withoutKATEnv(os.Environ(), repo)
-		out, err := cmd.CombinedOutput()
+		out, err := runToolchainScript(python, root, repo, withoutKATEnv(os.Environ(), repo), "--toolchain-status")
 		if err == nil {
 			t.Fatalf("expected missing source to fail, output=%s", string(out))
 		}
@@ -123,10 +145,7 @@ func TestToolchainScriptFailsClosed(t *testing.T) {
 kat:
   binary_path: "bin/kkachi-agent-tester"
 `)
-		cmd := exec.Command(python, filepath.Join(root, "scripts", "kkachi-agent-tester-toolchain"), "--toolchain-status")
-		cmd.Dir = repo
-		cmd.Env = withoutKATEnv(os.Environ(), repo)
-		out, err := cmd.CombinedOutput()
+		out, err := runToolchainScript(python, root, repo, withoutKATEnv(os.Environ(), repo), "--toolchain-status")
 		if err == nil {
 			t.Fatalf("expected relative path to fail, output=%s", string(out))
 		}
@@ -144,10 +163,7 @@ kat:
   cli_version: "0.1.3"
   binary_path: "`+bin+`"
 `)
-		cmd := exec.Command(python, filepath.Join(root, "scripts", "kkachi-agent-tester-toolchain"), "--toolchain-status")
-		cmd.Dir = repo
-		cmd.Env = withoutKATEnv(os.Environ(), repo)
-		out, err := cmd.CombinedOutput()
+		out, err := runToolchainScript(python, root, repo, withoutKATEnv(os.Environ(), repo), "--toolchain-status")
 		if err == nil {
 			t.Fatalf("expected version mismatch to fail, output=%s", string(out))
 		}
@@ -155,6 +171,66 @@ kat:
 			t.Fatalf("expected version mismatch diagnostic, got %s", string(out))
 		}
 	})
+
+	t.Run("non-executable binary", func(t *testing.T) {
+		t.Parallel()
+		repo := t.TempDir()
+		bin := writeFakeKAT(t, t.TempDir(), "0.1.3")
+		if err := os.Chmod(bin, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		writeToolchainMetadata(t, repo, `schema_version: "kkachi.toolchain.v1"
+kat:
+  binary_path: "`+bin+`"
+`)
+		out, err := runToolchainScript(python, root, repo, withoutKATEnv(os.Environ(), repo), "--toolchain-status")
+		if err == nil {
+			t.Fatalf("expected non-executable binary to fail, output=%s", string(out))
+		}
+		if !strings.Contains(string(out), "binary is not executable") {
+			t.Fatalf("expected executable diagnostic, got %s", string(out))
+		}
+	})
+
+	t.Run("malformed version", func(t *testing.T) {
+		t.Parallel()
+		repo := t.TempDir()
+		writeToolchainMetadata(t, repo, `schema_version: "kkachi.toolchain.v1"
+kat:
+  cli_version: "0.1"
+`)
+		out, err := runToolchainScript(python, root, repo, withoutKATEnv(os.Environ(), repo), "--toolchain-status")
+		if err == nil {
+			t.Fatalf("expected malformed version to fail, output=%s", string(out))
+		}
+		if !strings.Contains(string(out), "invalid kat.cli_version") {
+			t.Fatalf("expected malformed-version diagnostic, got %s", string(out))
+		}
+	})
+
+	t.Run("unsupported schema", func(t *testing.T) {
+		t.Parallel()
+		repo := t.TempDir()
+		writeToolchainMetadata(t, repo, `schema_version: "kkachi.toolchain.v2"
+kat:
+  cli_version: "0.1.3"
+`)
+		out, err := runToolchainScript(python, root, repo, withoutKATEnv(os.Environ(), repo), "--toolchain-status")
+		if err == nil {
+			t.Fatalf("expected unsupported schema to fail, output=%s", string(out))
+		}
+		if !strings.Contains(string(out), "unsupported schema_version") {
+			t.Fatalf("expected schema diagnostic, got %s", string(out))
+		}
+	})
+}
+
+func runToolchainScript(python, root, repo string, env []string, args ...string) ([]byte, error) {
+	commandArgs := append([]string{filepath.Join(root, "scripts", "kkachi-agent-tester-toolchain")}, args...)
+	cmd := exec.Command(python, commandArgs...)
+	cmd.Dir = repo
+	cmd.Env = env
+	return cmd.CombinedOutput()
 }
 
 func requirePython3(t *testing.T) string {

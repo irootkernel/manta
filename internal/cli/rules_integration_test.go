@@ -59,6 +59,12 @@ func TestRulesLifecycleCommands(t *testing.T) {
 	}
 	stdout.Reset()
 	stderr.Reset()
+	exitCode = Main([]string{"--repo", repo, "rules", "search", "fixture-backed"}, &stdout, &stderr)
+	if exitCode != 0 || !strings.Contains(stdout.String(), "generic-v1") {
+		t.Fatalf("expected search to find created rule, exit=%d stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
 	exitCode = Main([]string{"--repo", repo, "rules", "show", "generic-v1"}, &stdout, &stderr)
 	if exitCode != 0 || !strings.Contains(stdout.String(), "created_by: tester") {
 		t.Fatalf("expected show to print yaml, exit=%d stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
@@ -73,6 +79,24 @@ func TestRulesLifecycleCommands(t *testing.T) {
 	exitCode = Main([]string{"--repo", repo, "rules", "test", "--rule", "generic-v1", "--log", filepath.ToSlash(rawPath), "--expect-span", "2:5"}, &stdout, &stderr)
 	if exitCode != 0 || !strings.Contains(stdout.String(), "PASS generic-v1") {
 		t.Fatalf("expected rules test to pass, exit=%d stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	updatedPath := filepath.Join(repo, "generic-v1-update.yaml")
+	updatedRuleText := strings.ReplaceAll(ruleText, "reason: fixture-backed rule", "reason: fixture-backed rule updated")
+	updatedRuleText = strings.ReplaceAll(updatedRuleText, "confidence: medium", "confidence: high")
+	if err := os.WriteFile(updatedPath, []byte(updatedRuleText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	exitCode = Main([]string{"--repo", repo, "rules", "update", "generic-v1", "--file", updatedPath}, &stdout, &stderr)
+	if exitCode != 0 || !strings.Contains(stdout.String(), "generic-v1") {
+		t.Fatalf("expected update to succeed, exit=%d stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	exitCode = Main([]string{"--repo", repo, "rules", "show", "generic-v1"}, &stdout, &stderr)
+	if exitCode != 0 || !strings.Contains(stdout.String(), "reason: fixture-backed rule updated") || !strings.Contains(stdout.String(), "confidence: high") {
+		t.Fatalf("expected show to report persisted update, exit=%d stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
 	}
 	stdout.Reset()
 	stderr.Reset()

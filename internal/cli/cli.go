@@ -28,8 +28,6 @@ type globalOptions struct {
 	OutputDir   string
 	RunID       string
 	JSON        bool
-	NoColor     bool
-	Verbose     bool
 	ShowVersion bool
 }
 
@@ -106,8 +104,6 @@ func parseGlobalOptions(args []string) (globalOptions, []string, error) {
 	fs.StringVar(&opts.OutputDir, "output-dir", "", "output dir")
 	fs.StringVar(&opts.RunID, "run-id", "", "run id")
 	fs.BoolVar(&opts.JSON, "json", false, "json output")
-	fs.BoolVar(&opts.NoColor, "no-color", false, "disable color")
-	fs.BoolVar(&opts.Verbose, "verbose", false, "verbose")
 	fs.BoolVar(&opts.ShowVersion, "version", false, "show version")
 	if err := fs.Parse(args); err != nil {
 		return opts, nil, err
@@ -148,8 +144,6 @@ func runCommand(opts globalOptions, args []string, stdout, stderr io.Writer) int
 		OutputDir:  opts.OutputDir,
 		RunID:      opts.RunID,
 		JSON:       opts.JSON,
-		NoColor:    opts.NoColor,
-		Verbose:    opts.Verbose,
 	}
 	if lane != "" {
 		req.Mode = model.RunModeAdHoc
@@ -203,8 +197,6 @@ func summarizeCommand(opts globalOptions, args []string, stdout, stderr io.Write
 		OutputDir:  opts.OutputDir,
 		RunID:      opts.RunID,
 		JSON:       opts.JSON,
-		NoColor:    opts.NoColor,
-		Verbose:    opts.Verbose,
 	}
 	result, exitCode, err := executeSummarize(req, rest[0])
 	if err != nil {

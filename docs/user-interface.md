@@ -1,6 +1,6 @@
 # KAT User Interface
 
-Status: Complete
+Status: Complete through `HARDE-006`
 Scope: CLI-first interface for KAT v0.1
 
 ## Interface principles
@@ -62,10 +62,52 @@ Recommended global options:
 | `--output-dir <path>` | Write standalone artifacts outside `.kat/`. |
 | `--run-id <id>` | Use Kkachi-compatible `.kkachi/runs/<run_id>/...` artifact layout. |
 | `--json` | Print compact JSON result to stdout. |
-| `--no-color` | Disable ANSI colors. |
-| `--verbose` | Print additional local diagnostics without dumping raw logs. |
 
 Run IDs, configured command IDs, and rule IDs must match `[A-Za-z0-9][A-Za-z0-9_-]*`. Invalid identifiers fail with config exit code `2`; run identifiers are checked before the test command starts.
+
+KAT output is plain text and does not emit ANSI color. Historical `--no-color` and `--verbose` placeholders had no executable behavior and are not supported options; either flag now fails closed with config exit code `2`.
+
+## Version and toolchain selection
+
+Use either version surface to inspect a selected binary:
+
+```bash
+kkachi-agent-tester --version
+kkachi-agent-tester version --json
+```
+
+For deterministic automation, the bundled `scripts/kkachi-agent-tester-toolchain` resolver uses this precedence:
+
+1. Absolute executable path from `KKACHI_KAT_BIN`.
+2. Absolute `kat.binary_path` in `.kkachi/toolchain.yaml`.
+3. `kat.cli_version` resolved as `${KKACHI_TOOLCHAIN_ROOT:-$HOME/.local/kkachi/toolchains}/kat/v<version>/bin/kkachi-agent-tester`.
+
+The resolver never falls back to `PATH`. It verifies that the selected path is executable and that `--version` succeeds. When `kat.cli_version` accompanies a metadata-selected binary, the reported semantic version must match exactly. Missing KAT metadata, unsupported schema versions, relative or non-executable paths, malformed versions, and version mismatches fail closed.
+
+An explicit local binary can be inspected without editing generated metadata:
+
+```bash
+KKACHI_KAT_BIN=/absolute/path/to/kkachi-agent-tester scripts/kkachi-agent-tester-toolchain --toolchain-status
+```
+
+Versioned selection uses local metadata such as:
+
+```yaml
+schema_version: "kkachi.toolchain.v1"
+kat:
+  cli_version: "0.1.3"
+```
+
+An absolute override may be recorded with an optional version assertion:
+
+```yaml
+schema_version: "kkachi.toolchain.v1"
+kat:
+  cli_version: "0.1.3"
+  binary_path: "/absolute/path/to/kkachi-agent-tester"
+```
+
+KAS/KAH-generated `.kkachi/toolchain.yaml` may omit the `kat` block; set `KKACHI_KAT_BIN` or add explicit local KAT metadata. Treat the generated file as local state, not source documentation.
 
 ## Tested setup fixture
 
@@ -94,6 +136,7 @@ echo 'noise: start'
 echo 'TypeError: token=secret failed'
 echo 'src/foo.test.ts:42:13'
 echo '✗ renders empty state'
+echo
 exit 1
 SH
 chmod +x test.sh
@@ -103,7 +146,45 @@ noise: start
 TypeError: token=secret failed
 src/foo.test.ts:42:13
 ✗ renders empty state
+
 LOG
+
+cat > fixtures/generic-v1.yaml <<'YAML'
+id: generic-v1
+lane: unit
+parser: generic
+status: active
+provenance:
+  created_by: tester
+  source_run: local-unit
+  source_command: unit
+  source_log_sha256: sha256:abc
+  source_span:
+    start_line: 2
+    end_line: 4
+  reason: fixture-backed rule
+match:
+  start:
+    regex: '^TypeError:'
+  end:
+    any_of:
+      - regex: '^$'
+    max_block_lines: 20
+  include_context:
+    before: 0
+    after: 0
+extract:
+  file_line:
+    regex: '(?P<file>[^\s:]+\.ts):(?P<line>\d+)'
+  test_name:
+    regex: '^\s*[✗×]\s+(?P<test>.+)$'
+confidence: medium
+YAML
+
+sed \
+  -e 's/reason: fixture-backed rule/reason: fixture-backed rule updated/' \
+  -e 's/confidence: medium/confidence: high/' \
+  fixtures/generic-v1.yaml > fixtures/generic-v1-update.yaml
 ```
 
 ## Tested command examples
@@ -111,7 +192,8 @@ LOG
 Configured run with deterministic artifact paths:
 
 ```bash
-kkachi-agent-tester --run-id example-run run unit
+kkachi-agent-tester --config .kkachi/tester.yaml --run-id example-run run unit
+# exits 1 because the fixture command fails
 # writes .kkachi/runs/example-run/artifacts/test/unit.raw.log
 # writes .kkachi/runs/example-run/artifacts/test/unit.summary.json
 # writes .kkachi/runs/example-run/artifacts/test/unit.summary.md
@@ -124,6 +206,7 @@ Ad-hoc run without project config commands:
 
 ```bash
 kkachi-agent-tester run --lane unit -- sh test.sh
+# exits 1 because the fixture command fails
 ```
 
 Summarize an existing raw log without rerunning the command:
@@ -146,16 +229,20 @@ kkachi-agent-tester excerpt --summary .kkachi/runs/summarize-example/artifacts/t
 Compact JSON output for scripts:
 
 ```bash
-kkachi-agent-tester --json summarize fixtures/unit.raw.log
+kkachi-agent-tester --output-dir evidence --json summarize fixtures/unit.raw.log
 ```
 
 Fixture-backed rule workflow examples:
 
 ```bash
+kkachi-agent-tester rules create --file fixtures/generic-v1.yaml
 kkachi-agent-tester rules list
+kkachi-agent-tester rules search fixture-backed
 kkachi-agent-tester rules show generic-v1
-kkachi-agent-tester rules test --rule generic-v1 --log internal/extract/testdata/vitest.raw.log --expect-span 7:14
-kkachi-agent-tester rules propose --lane unit --parser vitest --raw-log internal/extract/testdata/vitest.raw.log --span 7:9
+kkachi-agent-tester rules test --rule generic-v1 --log fixtures/unit.raw.log --expect-span 2:5
+kkachi-agent-tester rules update generic-v1 --file fixtures/generic-v1-update.yaml
+kkachi-agent-tester rules propose --lane unit --parser generic --raw-log fixtures/unit.raw.log --span 2:4
+kkachi-agent-tester rules delete generic-v1 --reason "superseded by v2"
 ```
 
 ## Summarize mode notes
@@ -207,9 +294,5 @@ Raw log SHA-256: sha256:...
 
 ## Notes
 
-Command exit code is authoritative for `run`. Extraction rules only summarize evidence. Use `kkachi-agent-tester excerpt --summary .kkachi/runs/summarize-example/artifacts/test/unit.summary.json F001` for deterministic excerpt lookup.
+Command exit code is authoritative. Extraction rules only summarize evidence.
 ```
-
-## UI backlog references
-
-- Rule examples should be based on real fixtures: `todo.md#TD-RULE-001`.
