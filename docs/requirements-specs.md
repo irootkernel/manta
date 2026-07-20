@@ -1,7 +1,7 @@
 # KAT Requirement Specs
 
-Status: Complete
-Scope: KAT v0.1 standalone documentation baseline
+Status: v0.1 baseline complete; hardening requirements planned
+Scope: KAT v0.1 standalone baseline and post-baseline hardening
 Source context: KAS v0.2 / KAH v0.2 / KAT v0.1 / GJC delegated execution SOT, with KAT kept independent from KAS and KAH for this repository setup.
 
 ## Requirement status legend
@@ -11,7 +11,7 @@ Source context: KAS v0.2 / KAH v0.2 / KAT v0.1 / GJC delegated execution SOT, wi
 - `[x]` Complete
 - `Blocked` means external decision or missing dependency prevents implementation.
 
-Implementation note: the current v0.1 roadmap is implemented. The remaining future work is incremental enhancement rather than missing baseline scope.
+Implementation note: the original v0.1 roadmap is implemented. Repository review identified post-baseline correctness and contract gaps that are now tracked as the `RQHAR` requirements below and the `HARDE` epic in `roadmap.md`. Existing baseline completion records do not imply that the hardening requirements are complete.
 
 ## RQCLI: Command-line interface
 
@@ -91,6 +91,16 @@ Implementation note: the current v0.1 roadmap is implemented. The remaining futu
 - [x] `KAT-REQ-RQDOC-002` Add CLI examples after the first executable implementation exists. See `todo.md#TD-DOC-001`.
 - [x] `KAT-REQ-RQDOC-003` Add parser/rule examples based on real fixture logs. See `todo.md#TD-RULE-001`.
 - [x] `KAT-REQ-RQDOC-004` Add release-readiness checklist before tagging KAT v0.1.0. See `todo.md#TD-REL-001`.
+
+## RQHAR: Post-baseline hardening and contract closure
+
+- [ ] `KAT-REQ-RQHAR-001` Validate every artifact-bearing identifier and reference, reject path syntax in identifiers, and fail closed when a resolved path or symlink would escape its allowed artifact boundary.
+- [ ] `KAT-REQ-RQHAR-002` Plan and open raw-log artifacts before command execution, handle operator interruption signals explicitly, forward termination to the child process, and preserve bounded partial raw/status evidence with an explicit non-pass state.
+- [ ] `KAT-REQ-RQHAR-003` Allocate collision-free standalone run directories so repeated executions in the same timestamp interval never overwrite earlier raw, summary, status, or excerpt artifacts.
+- [ ] `KAT-REQ-RQHAR-004` Apply configured redaction consistently to all surfaced summary, status, excerpt, and console-safe text and metadata while preserving original raw logs unchanged.
+- [ ] `KAT-REQ-RQHAR-005` Define one fail-closed contract for specialized-parser misses and internal errors, align implementation and documentation to that contract, and test `precise`, `partial`, `degraded`, `no_match`, and any retained `internal_error` behavior.
+- [ ] `KAT-REQ-RQHAR-006` Make every documented CLI option and example match executable behavior, including the disposition of `--verbose` and `--no-color`, self-contained rule examples, generated Markdown shape, and toolchain resolver/operator guidance.
+- [ ] `KAT-REQ-RQHAR-007` Add end-to-end regression coverage for artifact containment, symlink escape, interruption, collision resistance, redaction boundaries, parser/error-state behavior, CLI examples, and both standalone and `--run-id` layouts before declaring hardening complete.
 
 ## Out of scope for v0.1 standalone setup
 

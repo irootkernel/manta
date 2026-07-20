@@ -8,3 +8,4 @@ bin/
 .omc/
 .external-review-sidecar/
 
+.DS_Store

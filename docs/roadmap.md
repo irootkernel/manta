@@ -1,15 +1,17 @@
 # KAT Roadmap
 
-Status: v0.1 standalone MVP complete; GAJAE-009 integration-contract mapping documented; GAJAE-010 guidance follow-up completed
-Scope: Implementation tracking for KAT v0.1 standalone MVP
+Status: v0.1 standalone MVP complete; GAJAE integration-contract work complete; HARDE hardening epic planned
+Scope: Implementation tracking for the KAT v0.1 standalone baseline and post-baseline hardening
 
 Task status values: `Planned`, `In Progress`, `Blocked`, `Done`, `Deferred`.
+
+Existing `Done` entries record completion of the original v0.1 implementation slices. They do not supersede or satisfy the later `HARDE` tasks, which close correctness, safety, verification, and documentation gaps found during repository review.
 
 Current implementation snapshot:
 - `Done`: `SETUP-001` to `SETUP-003`, `RUNNR-001` to `RUNNR-003`, `ARTIF-001` to `ARTIF-003`, `PARSE-001` to `PARSE-003`, `SAFEY-001` to `SAFEY-003`, `CLIUX-001`, `CLIUX-002`, `RULES-001` to `RULES-003`, `DOCUM-001` to `DOCUM-003`
 - `In Progress`: none
 - `Deferred`: none
-- `Planned`: none
+- `Planned`: `HARDE-001` to `HARDE-007`
 - `Done`: `GAJAE-009` documented that KAH normalizes existing KAT v0.1.0 artifacts without KAT source changes; `GAJAE-010` finalized durable operator docs/skill guidance after the KAH-side normalization contract
 
 ## SETUP: Project foundation
@@ -74,6 +76,20 @@ Current implementation snapshot:
 | DOCUM-001 | Done | Create initial docs for requirements, architecture, user interface, ADRs, roadmap, todo, and implementation notes. | `KAT-REQ-RQDOC-001` |
 | DOCUM-002 | Done | Add real CLI examples, config examples, and artifact examples after first runnable implementation. | `KAT-REQ-RQDOC-002`, `TD-DOC-001` |
 | DOCUM-003 | Done | Add release-readiness checklist, fixture evidence expectations, and v0.1 packaging notes before tagging. | `KAT-REQ-RQDOC-004`, `TD-REL-001` |
+
+## HARDE: Post-baseline hardening and contract closure
+
+Implement these tasks as separate, reviewable PRs in numerical order. A task moves to `Done` only after its focused verification and the existing affected test suites pass. `HARDE-007` is the final end-to-end hardening gate.
+
+| Task ID | Status | Goal | Verification | Reference |
+|---|---|---|---|---|
+| HARDE-001 | Planned | Enforce fail-closed artifact containment for run IDs, configured command IDs, rule IDs, and excerpt references; reject absolute paths, traversal, cross-run access, and symlink escape. | Add traversal and symlink tests, then pass focused artifact/config/rules/CLI tests. | `KAT-REQ-RQHAR-001`, `KAT-REQ-RQCFG-006`, `KAT-REQ-RQART-001`, `KAT-REQ-RQSEC-003` |
+| HARDE-002 | Planned | Make command execution interruption-safe by preparing raw evidence before execution, handling and forwarding termination signals, and preserving partial raw/status artifacts with an explicit non-pass result. | Exercise a built binary with SIGINT and SIGTERM, verify partial evidence and status, then pass runner/CLI/E2E tests. | `KAT-REQ-RQHAR-002`, `KAT-REQ-RQRUN-003`, `KAT-REQ-RQRUN-005`, `KAT-REQ-RQRUN-006` |
+| HARDE-003 | Planned | Prevent standalone artifact overwrite by allocating collision-free run directories for repeated configured, ad-hoc, and summarize operations. | Run equivalent commands repeatedly within one timestamp interval, verify distinct paths and checksums, then pass artifact/CLI/E2E tests. | `KAT-REQ-RQHAR-003`, `KAT-REQ-RQART-002`, `KAT-REQ-RQART-007`, `ADR-0003` |
+| HARDE-004 | Planned | Complete the redaction boundary for surfaced summary, status, excerpt, and console-safe metadata while leaving original raw logs unchanged. | Test secrets in argv, identifiers, lanes, paths, failures, and warnings; verify they remain only in raw evidence, then pass safety/CLI/E2E tests. | `KAT-REQ-RQHAR-004`, `KAT-REQ-RQCFG-005`, `KAT-REQ-RQSEC-001`, `KAT-REQ-RQSEC-002`, `ADR-0003` |
+| HARDE-005 | Planned | Resolve and implement the specialized-parser miss and internal-error artifact contracts without allowing extraction behavior to override command truth. | Add contract tests for all extractor states and retained run states, then pass extract/CLI/guardrail tests. | `KAT-REQ-RQHAR-005`, `KAT-REQ-RQEXT-005` to `KAT-REQ-RQEXT-007`, `KAT-REQ-RQSEC-005`, `ADR-0002` |
+| HARDE-006 | Planned | Synchronize executable CLI behavior and durable documentation, including `--verbose`, `--no-color`, self-contained rule examples, Markdown output, version/toolchain resolver guidance, and roadmap/todo status wording. | Execute every documented command against a fresh fixture, compare generated output with examples, and pass CLI/toolchain E2E tests plus `git diff --check`. | `KAT-REQ-RQHAR-006`, `KAT-REQ-RQCLI-001` to `KAT-REQ-RQCLI-006`, `KAT-REQ-RQDOC-001` to `KAT-REQ-RQDOC-004` |
+| HARDE-007 | Planned | Run the complete hardening regression and release-readiness gate across standalone and Kkachi-compatible layouts, then update hardening statuses only from observed evidence. | Pass `make test`, configured/ad-hoc/summarize/excerpt/rules smokes, path and signal probes, both artifact layouts, install/toolchain checks, and `git diff --check`. | `KAT-REQ-RQHAR-007`, `KAT-REQ-RQDOC-004`, `TD-HARDE-001` |
 
 ## GAJAE: KAS/KAH pilot-unblock integration contract
 

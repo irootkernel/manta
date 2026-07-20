@@ -1,11 +1,13 @@
 # KAT Implementation Note
 
-Status: Complete
-Scope: Guidance for implementing complex KAT v0.1 areas without KAS/KAH dependency
+Status: v0.1 baseline complete; HARDE follow-up planned
+Scope: Guidance for implementing complex KAT v0.1 and post-baseline hardening areas without KAS/KAH dependency
 
 ## Implementation posture
 
 Build KAT as a small deterministic Go CLI first. Do not add KAS, KAH, GJC session, or authority concepts to the core package. Treat optional Kkachi artifact layout as output path compatibility only.
+
+The current implementation baseline is not the end of hardening work. Use `roadmap.md#harde-post-baseline-hardening-and-contract-closure` and `requirements-specs.md#rqhar-post-baseline-hardening-and-contract-closure` as the implementation sequence and contract for the next PRs. Do not mark a `HARDE` task complete from code or proxy test success alone; run and observe every verification condition recorded in its roadmap row.
 
 ## Suggested package boundaries
 
