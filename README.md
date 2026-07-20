@@ -100,13 +100,13 @@ kkachi-agent-tester run --lane unit -- sh test.sh
 Summarize an existing raw log:
 
 ```bash
-kkachi-agent-tester summarize fixtures/unit.raw.log
+kkachi-agent-tester --run-id summarize-example summarize fixtures/unit.raw.log
 ```
 
 Excerpt lookup:
 
 ```bash
-kkachi-agent-tester excerpt --summary fixtures/unit.summary.json F001
+kkachi-agent-tester excerpt --summary .kkachi/runs/summarize-example/artifacts/test/unit.summary.json F001
 ```
 
 Rule lifecycle:
@@ -123,8 +123,10 @@ kkachi-agent-tester rules propose --lane unit --parser vitest --raw-log internal
 Standalone mode writes to:
 
 ```text
-.kat/runs/<timestamp-or-run-id>/
+.kat/runs/<UTC-timestamp>[-NNN]/
 ```
+
+KAT reserves each standalone run directory atomically. The first operation in a UTC-second interval uses the timestamp alone; concurrent or repeated operations use `-001`, `-002`, and later suffixes without overwriting prior evidence. `--output-dir` uses the same allocation rule under `<output-dir>/runs/`.
 
 When `--run-id` is supplied, KAT writes to:
 
@@ -132,7 +134,9 @@ When `--run-id` is supplied, KAT writes to:
 .kkachi/runs/<run_id>/artifacts/test/
 ```
 
-Summarize mode writes beside the input raw log by default, or into the selected output layout when `--run-id` or `--output-dir` is supplied.
+Summarize mode copies the input raw log into a newly allocated standalone run by default, or into the selected output layout when `--run-id` or `--output-dir` is supplied. The original input remains unchanged.
+
+Each summarize operation stores a complete raw-log copy in its artifact directory, so repeated summarization increases local storage usage in proportion to the source log size.
 
 Excerpt references stored in summaries are relative to the summary directory, for example `excerpts/F001.log`. `excerpt --summary` accepts absolute summary paths, but rejects absolute, traversal, cross-run, dangling, or symlink-escaping embedded excerpt references.
 

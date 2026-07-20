@@ -75,10 +75,11 @@ On Unix, the runner starts the command in its own process group. SIGINT and SIGT
 2. CLI resolves repository root, config path, and raw-log path.
 3. Config loader validates optional redaction/noise config and project rules.
 4. KAT infers `command_id` and `lane` from the raw-log basename when no execution metadata exists.
-5. Extraction engine reads the existing raw log and applies the `generic` parser plus matching project rules.
-6. Redactor and noise filters shape surfaced artifacts.
-7. Artifact writer writes summary JSON, summary Markdown, excerpts, and status JSON beside the raw log or into the selected output layout.
-8. CLI exits `0` when summarization succeeds because no test command was executed in this mode.
+5. Artifact writer reserves a standalone run directory, or uses the fixed `--run-id` layout, and copies the original raw bytes into it.
+6. Extraction engine applies the `generic` parser plus matching project rules to the copied evidence.
+7. Redactor and noise filters shape surfaced artifacts.
+8. Artifact writer writes summary JSON, summary Markdown, excerpts, and status JSON in the same artifact layout.
+9. CLI exits `0` when summarization succeeds because no test command was executed in this mode.
 ```
 
 ## Artifact layout
@@ -96,12 +97,14 @@ When a run ID is supplied:
 Standalone mode may write to:
 
 ```text
-.kat/runs/<timestamp-or-run-id>/<command-id>.raw.log
-.kat/runs/<timestamp-or-run-id>/<command-id>.summary.json
-.kat/runs/<timestamp-or-run-id>/<command-id>.summary.md
-.kat/runs/<timestamp-or-run-id>/<command-id>.status.json
-.kat/runs/<timestamp-or-run-id>/excerpts/<failure-id>.log
+.kat/runs/<UTC-timestamp>[-NNN]/<command-id>.raw.log
+.kat/runs/<UTC-timestamp>[-NNN]/<command-id>.summary.json
+.kat/runs/<UTC-timestamp>[-NNN]/<command-id>.summary.md
+.kat/runs/<UTC-timestamp>[-NNN]/<command-id>.status.json
+.kat/runs/<UTC-timestamp>[-NNN]/excerpts/<failure-id>.log
 ```
+
+Standalone run directories are reserved atomically. The timestamp-only name is tried first, followed by zero-padded numeric suffixes on collision, so configured, ad-hoc, and summarize operations cannot reuse an existing standalone directory. Explicit `--run-id` paths are fixed compatibility paths and do not use this suffix allocator.
 
 Failure IDs such as `F001` are summary-local identifiers. Excerpt lookup is deterministic through summary context, not by assuming failure IDs are globally unique.
 The summary stores each excerpt as a summary-directory-relative reference such as `excerpts/F001.log`. Artifact-bearing identifiers use `[A-Za-z0-9][A-Za-z0-9_-]*`; canonical containment checks reject absolute paths, traversal, cross-run references, dangling links, and symlinks that resolve outside the selected boundary.
@@ -110,7 +113,7 @@ The containment boundary depends on the operation:
 
 - Default standalone and `--run-id` artifact writes are contained by the repository root.
 - `--output-dir` artifact writes are contained by the caller-selected output directory, whether that directory is relative or absolute.
-- In-place `summarize` writes are contained by the directory holding the input raw log.
+- Default `summarize` writes are contained by the repository root and copy the input raw evidence into a newly reserved `.kat/runs/` directory before materializing derived artifacts.
 - Excerpt reads are contained by the canonical `<summary-dir>/excerpts/` directory.
 - Project rules and rule proposals are contained by the repository root.
 

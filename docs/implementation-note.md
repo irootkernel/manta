@@ -171,6 +171,7 @@ Tests should cover:
 - Rule test with expected span.
 - Rule overmatch rejection.
 - Artifact path generation for `.kat/`, caller-selected `--output-dir`, and `.kkachi/runs/<run_id>/...` layouts.
+- Sequential, goroutine-concurrent, and cross-process standalone directory allocation within one UTC-second interval, including configured, ad-hoc, and summarize evidence preservation.
 - Invalid run, command, rule, and failure IDs failing before command execution or artifact writes.
 - Traversal, cross-run excerpt access, dangling links, and external symlink escape failing closed across artifact and rule operations.
 - Internal symlinks whose canonical targets remain inside the applicable boundary continuing to work.
@@ -189,6 +190,7 @@ Before tagging `v0.1.3`, verify all of the following:
 - parser fixture coverage for `generic`, `vitest`, `pytest`, `go-test`, and `playwright`
 - rule lifecycle coverage for `list/search/show/create/update/delete/test/propose`
 - artifact path and containment verification for `.kat/`, `--output-dir`, and `.kkachi/runs/<run_id>/...`
+- collision checks confirming repeated standalone operations retain distinct raw, summary, Markdown, status, and excerpt artifacts with unchanged raw-log checksums
 - watcher status JSON compatibility, including status-hash inputs
 - release notes mention known limitations, especially raw-log redaction policy and rule proposals remaining run-local until promoted
 

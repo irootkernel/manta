@@ -246,12 +246,8 @@ func executeRun(req model.RunRequest) (runResult, int, error) {
 	if err != nil {
 		return runResult{}, 0, err
 	}
-	paths, err := artifacts.PlanPaths(req.RepoRoot, req.OutputDir, req.RunID, commandID)
+	paths, err := artifacts.PreparePaths(req.RepoRoot, req.OutputDir, req.RunID, commandID)
 	if err != nil {
-		return runResult{}, 0, err
-	}
-
-	if err := artifacts.EnsureParents(paths); err != nil {
 		return runResult{}, 0, err
 	}
 	rawFile, err := artifacts.OpenRawLog(paths)
@@ -302,10 +298,15 @@ func executeSummarize(req model.RunRequest, rawLogArg string) (runResult, error)
 	if err != nil {
 		return runResult{}, err
 	}
-	paths, rawSHA, relRaw, err := planSummarizeArtifacts(req, resolved, raw, commandID)
+	paths, err := artifacts.PreparePaths(req.RepoRoot, req.OutputDir, req.RunID, commandID)
 	if err != nil {
 		return runResult{}, err
 	}
+	rawSHA, err := artifacts.WriteRawLog(paths, raw)
+	if err != nil {
+		return runResult{}, err
+	}
+	relRaw := artifacts.Rel(req.RepoRoot, paths.RawLogPath)
 	status, exitCode := inferSummarizeStatus(raw)
 	runOutput := model.RunOutput{
 		Metadata: model.RunMetadata{
@@ -400,41 +401,6 @@ func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.Ar
 		Extractor:  string(summary.ExtractorStatus),
 	}
 	return result, runOutput, nil
-}
-
-func planSummarizeArtifacts(req model.RunRequest, rawLogPath string, raw []byte, commandID string) (model.ArtifactPaths, string, string, error) {
-	if req.RunID != "" || req.OutputDir != "" {
-		paths, err := artifacts.PlanPaths(req.RepoRoot, req.OutputDir, req.RunID, commandID)
-		if err != nil {
-			return model.ArtifactPaths{}, "", "", err
-		}
-		if err := artifacts.EnsureParents(paths); err != nil {
-			return model.ArtifactPaths{}, "", "", err
-		}
-		rawSHA, err := artifacts.WriteRawLog(paths, raw)
-		if err != nil {
-			return model.ArtifactPaths{}, "", "", err
-		}
-		return paths, rawSHA, artifacts.Rel(req.RepoRoot, paths.RawLogPath), nil
-	}
-	paths := siblingArtifactPaths(rawLogPath, commandID)
-	if err := artifacts.EnsureParents(paths); err != nil {
-		return model.ArtifactPaths{}, "", "", err
-	}
-	return paths, artifacts.SHA256(raw), artifacts.Rel(req.RepoRoot, rawLogPath), nil
-}
-
-func siblingArtifactPaths(rawLogPath, commandID string) model.ArtifactPaths {
-	baseDir := filepath.Dir(rawLogPath)
-	return model.ArtifactPaths{
-		BoundaryDir: baseDir,
-		BaseDir:     baseDir,
-		RawLogPath:  rawLogPath,
-		SummaryJSON: filepath.Join(baseDir, commandID+".summary.json"),
-		SummaryMD:   filepath.Join(baseDir, commandID+".summary.md"),
-		StatusJSON:  filepath.Join(baseDir, commandID+".status.json"),
-		ExcerptsDir: filepath.Join(baseDir, "excerpts"),
-	}
 }
 
 func inferSummarizeStatus(raw []byte) (model.RunStatus, int) {

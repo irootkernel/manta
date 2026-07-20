@@ -35,6 +35,15 @@ func MkdirAllWithin(rootPath, targetPath string, perm os.FileMode) (err error) {
 	return root.MkdirAll(relative, perm)
 }
 
+func MkdirWithin(rootPath, targetPath string, perm os.FileMode) (err error) {
+	root, relative, err := openResolvedRoot(rootPath, targetPath, true)
+	if err != nil {
+		return err
+	}
+	defer closeWithError(&err, root)
+	return root.Mkdir(relative, perm)
+}
+
 func ReadFileWithin(rootPath, targetPath string) (data []byte, err error) {
 	root, relative, err := openResolvedRoot(rootPath, targetPath, false)
 	if err != nil {

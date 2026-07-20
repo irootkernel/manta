@@ -4,7 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,7 +16,11 @@ import (
 	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
 )
 
-func PlanPaths(repoRoot, outputDir, runID, commandID string) (model.ArtifactPaths, error) {
+func PreparePaths(repoRoot, outputDir, runID, commandID string) (model.ArtifactPaths, error) {
+	return preparePathsAt(repoRoot, outputDir, runID, commandID, time.Now().UTC())
+}
+
+func preparePathsAt(repoRoot, outputDir, runID, commandID string, now time.Time) (model.ArtifactPaths, error) {
 	if runID != "" {
 		if err := safety.ValidateArtifactIdentifier("run id", runID); err != nil {
 			return model.ArtifactPaths{}, model.NewKATError(model.ExitCodeConfigError, "plan artifact paths", err)
@@ -23,27 +29,51 @@ func PlanPaths(repoRoot, outputDir, runID, commandID string) (model.ArtifactPath
 	if err := safety.ValidateArtifactIdentifier("command id", commandID); err != nil {
 		return model.ArtifactPaths{}, model.NewKATError(model.ExitCodeConfigError, "plan artifact paths", err)
 	}
-
-	stamp := runID
-	if stamp == "" {
-		stamp = time.Now().UTC().Format("20060102T150405")
+	if runID != "" {
+		paths := pathsForBase(repoRoot, filepath.Join(repoRoot, ".kkachi", "runs", runID, "artifacts", "test"), commandID)
+		if err := ensureParents(paths); err != nil {
+			return model.ArtifactPaths{}, err
+		}
+		return paths, nil
 	}
 
 	boundaryDir := repoRoot
-	var baseDir string
-	if runID != "" {
-		baseDir = filepath.Join(repoRoot, ".kkachi", "runs", runID, "artifacts", "test")
-	} else if outputDir != "" {
+	runsDir := filepath.Join(repoRoot, ".kat", "runs")
+	if outputDir != "" {
 		if filepath.IsAbs(outputDir) {
 			boundaryDir = outputDir
 		} else {
 			boundaryDir = filepath.Join(repoRoot, outputDir)
 		}
-		baseDir = filepath.Join(boundaryDir, "runs", stamp)
-	} else {
-		baseDir = filepath.Join(repoRoot, ".kat", "runs", stamp)
+		runsDir = filepath.Join(boundaryDir, "runs")
+	}
+	if err := safety.MkdirAllWithin(boundaryDir, runsDir, 0o755); err != nil {
+		return model.ArtifactPaths{}, model.NewKATError(model.ExitCodeArtifactError, "create artifact runs directory", err)
 	}
 
+	baseStamp := now.UTC().Format("20060102T150405")
+	for sequence := 0; ; sequence++ {
+		stamp := baseStamp
+		if sequence > 0 {
+			stamp = fmt.Sprintf("%s-%03d", baseStamp, sequence)
+		}
+		baseDir := filepath.Join(runsDir, stamp)
+		if err := safety.MkdirWithin(boundaryDir, baseDir, 0o755); err != nil {
+			if errors.Is(err, fs.ErrExist) {
+				continue
+			}
+			return model.ArtifactPaths{}, model.NewKATError(model.ExitCodeArtifactError, "reserve artifact directory", err)
+		}
+
+		paths := pathsForBase(boundaryDir, baseDir, commandID)
+		if err := ensureParents(paths); err != nil {
+			return model.ArtifactPaths{}, err
+		}
+		return paths, nil
+	}
+}
+
+func pathsForBase(boundaryDir, baseDir, commandID string) model.ArtifactPaths {
 	return model.ArtifactPaths{
 		BoundaryDir: boundaryDir,
 		BaseDir:     baseDir,
@@ -52,10 +82,10 @@ func PlanPaths(repoRoot, outputDir, runID, commandID string) (model.ArtifactPath
 		SummaryMD:   filepath.Join(baseDir, commandID+".summary.md"),
 		StatusJSON:  filepath.Join(baseDir, commandID+".status.json"),
 		ExcerptsDir: filepath.Join(baseDir, "excerpts"),
-	}, nil
+	}
 }
 
-func EnsureParents(paths model.ArtifactPaths) error {
+func ensureParents(paths model.ArtifactPaths) error {
 	if err := safety.MkdirAllWithin(paths.BoundaryDir, paths.ExcerptsDir, 0o755); err != nil {
 		return model.NewKATError(model.ExitCodeArtifactError, "create artifact directory", err)
 	}

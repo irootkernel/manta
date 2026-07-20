@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -9,8 +10,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/artifacts"
 	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
 )
+
+type binaryRunResult struct {
+	Summary    string `json:"summary"`
+	StatusJSON string `json:"status_json"`
+	RawLog     string `json:"raw_log"`
+}
+
+type binaryCommandOutput struct {
+	output []byte
+	err    error
+}
 
 func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 	t.Parallel()
@@ -115,15 +128,34 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 	if !strings.Contains(string(summarizeOut), "Summary: .kat/runs/") {
 		t.Fatalf("expected summarize output to report artifact paths, got %q", string(summarizeOut))
 	}
+	entries, err = os.ReadDir(runsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected summarize to allocate a second run directory, got %d", len(entries))
+	}
+	var summarizeDir string
+	for _, entry := range entries {
+		candidate := filepath.Join(runsDir, entry.Name())
+		if candidate != runDir {
+			summarizeDir = candidate
+			break
+		}
+	}
+	if summarizeDir == "" {
+		t.Fatal("expected a distinct summarize directory")
+	}
+	summaryPath = filepath.Join(summarizeDir, "unit.summary.json")
 	summaryData, err = os.ReadFile(summaryPath)
 	if err != nil {
-		t.Fatalf("expected summarize to recreate summary: %v", err)
+		t.Fatalf("expected summarize to create summary in a new run: %v", err)
 	}
 	if err := json.Unmarshal(summaryData, &summary); err != nil {
 		t.Fatal(err)
 	}
 	if summary.Status != model.RunStatusFailed || len(summary.Failures) != 1 {
-		t.Fatalf("expected summarize to recreate failed summary with one failure, got %+v", summary)
+		t.Fatalf("expected summarize to create failed summary with one failure, got %+v", summary)
 	}
 	excerptOut, err = exec.Command(bin, "--repo", repo, "excerpt", "--summary", filepath.ToSlash(summaryPath), "F001").CombinedOutput()
 	if err != nil {
@@ -131,6 +163,74 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 	}
 	if !strings.Contains(string(excerptOut), "token=<redacted>") {
 		t.Fatalf("expected redacted excerpt output after summarize, got %q", string(excerptOut))
+	}
+}
+
+func TestBinaryStandaloneCollisionResistance(t *testing.T) {
+	root := projectRoot(t)
+	bin := buildBinary(t, root)
+	repo := t.TempDir()
+	writeE2EConfig(t, repo, "#!/bin/sh\nprintf 'configured\\n'\n")
+	if err := os.WriteFile(filepath.Join(repo, "adhoc.sh"), []byte("#!/bin/sh\nprintf 'adhoc\\n'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	const concurrentRuns = 8
+	start := make(chan struct{})
+	outputs := make(chan binaryCommandOutput, concurrentRuns)
+	for range concurrentRuns {
+		go func() {
+			<-start
+			cmd := exec.Command(bin, "--repo", repo, "--json", "run", "unit")
+			cmd.Dir = repo
+			output, err := cmd.CombinedOutput()
+			outputs <- binaryCommandOutput{output: output, err: err}
+		}()
+	}
+	close(start)
+
+	results := make([]binaryRunResult, 0, concurrentRuns+4)
+	for range concurrentRuns {
+		commandOutput := <-outputs
+		if commandOutput.err != nil {
+			t.Fatalf("concurrent configured run failed: %v output=%s", commandOutput.err, commandOutput.output)
+		}
+		results = append(results, decodeBinaryRunResult(t, commandOutput.output))
+	}
+	results = append(results,
+		runBinaryJSON(t, bin, repo, "run", "--lane", "unit", "sh", "adhoc.sh"),
+		runBinaryJSON(t, bin, repo, "run", "--lane", "unit", "sh", "adhoc.sh"),
+	)
+	assertDistinctBinaryRunDirectories(t, repo, results)
+	for _, result := range results {
+		snapshotBinaryRunArtifacts(t, repo, result, false)
+	}
+
+	rawLogPath := filepath.Join(repo, "fixture.raw.log")
+	rawText := "noise: start\nTypeError: failed\nsrc/foo.test.ts:42:13\n✗ renders empty state\n"
+	if err := os.WriteFile(rawLogPath, []byte(rawText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	firstSummarize := runBinaryJSON(t, bin, repo, "summarize", filepath.ToSlash(rawLogPath))
+	firstSnapshot := snapshotBinaryRunArtifacts(t, repo, firstSummarize, true)
+	secondSummarize := runBinaryJSON(t, bin, repo, "summarize", filepath.ToSlash(rawLogPath))
+	snapshotBinaryRunArtifacts(t, repo, secondSummarize, true)
+	assertDistinctBinaryRunDirectories(t, repo, append(results, firstSummarize, secondSummarize))
+	for path, want := range firstSnapshot {
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("re-read binary artifact %q: %v", path, err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("binary artifact changed at %q", path)
+		}
+	}
+	sourceRaw, err := os.ReadFile(rawLogPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(sourceRaw) != rawText {
+		t.Fatalf("source raw log changed: want %q got %q", rawText, sourceRaw)
 	}
 }
 
@@ -250,6 +350,92 @@ func writeE2EConfig(t *testing.T, repo, script string) {
 	if err := os.WriteFile(filepath.Join(repo, "test.sh"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func runBinaryJSON(t *testing.T, bin, repo string, args ...string) binaryRunResult {
+	t.Helper()
+	commandArgs := append([]string{"--repo", repo, "--json"}, args...)
+	cmd := exec.Command(bin, commandArgs...)
+	cmd.Dir = repo
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("binary command %q failed: %v output=%s", commandArgs, err, output)
+	}
+	return decodeBinaryRunResult(t, output)
+}
+
+func decodeBinaryRunResult(t *testing.T, output []byte) binaryRunResult {
+	t.Helper()
+	var result binaryRunResult
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("decode binary result %q: %v", output, err)
+	}
+	return result
+}
+
+func assertDistinctBinaryRunDirectories(t *testing.T, repo string, results []binaryRunResult) {
+	t.Helper()
+	seen := make(map[string]bool, len(results))
+	for _, result := range results {
+		baseDir := filepath.Dir(filepath.Join(repo, filepath.FromSlash(result.RawLog)))
+		if seen[baseDir] {
+			t.Fatalf("binary operations reused standalone run directory %q", baseDir)
+		}
+		seen[baseDir] = true
+	}
+}
+
+func snapshotBinaryRunArtifacts(t *testing.T, repo string, result binaryRunResult, requireExcerpt bool) map[string][]byte {
+	t.Helper()
+	statusPath := filepath.Join(repo, filepath.FromSlash(result.StatusJSON))
+	statusData, err := os.ReadFile(statusPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var status model.Status
+	if err := json.Unmarshal(statusData, &status); err != nil {
+		t.Fatal(err)
+	}
+	summaryJSONPath := filepath.Join(repo, filepath.FromSlash(status.SummaryPath))
+	summaryData, err := os.ReadFile(summaryJSONPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var summary model.Summary
+	if err := json.Unmarshal(summaryData, &summary); err != nil {
+		t.Fatal(err)
+	}
+	rawPath := filepath.Join(repo, filepath.FromSlash(result.RawLog))
+	rawData, err := os.ReadFile(rawPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantRawSHA := artifacts.SHA256(rawData)
+	if summary.RawLogSHA256 != wantRawSHA || status.RawLogSHA256 != wantRawSHA {
+		t.Fatalf("raw checksum mismatch: summary=%q status=%q want=%q", summary.RawLogSHA256, status.RawLogSHA256, wantRawSHA)
+	}
+
+	paths := []string{
+		rawPath,
+		summaryJSONPath,
+		filepath.Join(repo, filepath.FromSlash(result.Summary)),
+		statusPath,
+	}
+	for _, failure := range summary.Failures {
+		paths = append(paths, filepath.Join(filepath.Dir(summaryJSONPath), filepath.FromSlash(failure.Excerpt)))
+	}
+	if requireExcerpt && len(summary.Failures) == 0 {
+		t.Fatal("expected summarized failure excerpt")
+	}
+	snapshot := make(map[string][]byte, len(paths))
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read binary artifact %q: %v", path, err)
+		}
+		snapshot[path] = data
+	}
+	return snapshot
 }
 
 func writeE2ESummary(t *testing.T, dir, reference string) string {

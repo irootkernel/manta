@@ -27,13 +27,36 @@ func TestSummarizeRebuildsArtifactsFromRawLogOnly(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("expected summarize command to succeed, got %d stderr=%s", exitCode, stderr.String())
 	}
-	summaryPath := filepath.Join(rawDir, "unit.summary.json")
-	statusPath := filepath.Join(rawDir, "unit.status.json")
-	excerptPath := filepath.Join(rawDir, "excerpts", "F001.log")
-	for _, path := range []string{summaryPath, statusPath, excerptPath} {
+	runsDir := filepath.Join(repo, ".kat", "runs")
+	entries, err := os.ReadDir(runsDir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("expected one standalone summarize directory, err=%v entries=%d", err, len(entries))
+	}
+	baseDir := filepath.Join(runsDir, entries[0].Name())
+	summaryPath := filepath.Join(baseDir, "unit.summary.json")
+	statusPath := filepath.Join(baseDir, "unit.status.json")
+	excerptPath := filepath.Join(baseDir, "excerpts", "F001.log")
+	copiedRawPath := filepath.Join(baseDir, "unit.raw.log")
+	for _, path := range []string{copiedRawPath, summaryPath, statusPath, excerptPath} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected summarize to create %s: %v", path, err)
 		}
+	}
+	for _, path := range []string{
+		filepath.Join(rawDir, "unit.summary.json"),
+		filepath.Join(rawDir, "unit.status.json"),
+		filepath.Join(rawDir, "excerpts"),
+	} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("expected no derived artifact beside source at %s, stat error=%v", path, err)
+		}
+	}
+	copiedRaw, err := os.ReadFile(copiedRawPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(copiedRaw) != rawText {
+		t.Fatalf("expected copied raw log to match source, got %q", copiedRaw)
 	}
 	summaryData, err := os.ReadFile(summaryPath)
 	if err != nil {

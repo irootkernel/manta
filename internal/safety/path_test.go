@@ -1,6 +1,8 @@
 package safety
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -51,6 +53,22 @@ func TestPathOperationsWithinRoot(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].Name() != "evidence.log" {
 		t.Fatalf("unexpected directory entries %+v", entries)
+	}
+}
+
+func TestMkdirWithinCreatesOnlyNewContainedDirectory(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	parent := filepath.Join(root, "runs")
+	if err := os.Mkdir(parent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(parent, "run-001")
+	if err := MkdirWithin(root, target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := MkdirWithin(root, target, 0o755); !errors.Is(err, fs.ErrExist) {
+		t.Fatalf("expected existing directory error, got %v", err)
 	}
 }
 

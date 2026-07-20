@@ -125,17 +125,18 @@ kkachi-agent-tester run --lane unit -- sh test.sh
 Summarize an existing raw log without rerunning the command:
 
 ```bash
-kkachi-agent-tester summarize fixtures/unit.raw.log
-# writes fixtures/unit.summary.json
-# writes fixtures/unit.summary.md
-# writes fixtures/unit.status.json
-# writes fixtures/excerpts/F001.log
+kkachi-agent-tester --run-id summarize-example summarize fixtures/unit.raw.log
+# copies .kkachi/runs/summarize-example/artifacts/test/unit.raw.log
+# writes .kkachi/runs/summarize-example/artifacts/test/unit.summary.json
+# writes .kkachi/runs/summarize-example/artifacts/test/unit.summary.md
+# writes .kkachi/runs/summarize-example/artifacts/test/unit.status.json
+# writes .kkachi/runs/summarize-example/artifacts/test/excerpts/F001.log
 ```
 
 Deterministic excerpt lookup after either `run` or `summarize`:
 
 ```bash
-kkachi-agent-tester excerpt --summary fixtures/unit.summary.json F001
+kkachi-agent-tester excerpt --summary .kkachi/runs/summarize-example/artifacts/test/unit.summary.json F001
 ```
 
 Compact JSON output for scripts:
@@ -158,7 +159,8 @@ kkachi-agent-tester rules propose --lane unit --parser vitest --raw-log internal
 - `summarize <raw-log>` uses the `generic` parser plus any matching project rules.
 - When only a raw log is available, KAT infers `command_id` and `lane` from the raw-log basename. For example, `unit.raw.log` produces `command_id: unit` and `lane: unit`.
 - Because original execution metadata is unavailable, summarize infers `status` and `exit_code` from raw-log evidence. Use `run` when authoritative execution metadata is required.
-- Without `--run-id` or `--output-dir`, summarize writes summary/status/excerpt artifacts beside the input raw log. With either option, summarize copies the raw log into the planned artifact layout before writing derived artifacts.
+- Without `--run-id` or `--output-dir`, summarize copies the input raw log into a newly allocated `.kat/runs/<UTC-timestamp>[-NNN]/` directory and writes derived artifacts there. `--output-dir` uses the same collision-free allocation under `<output-dir>/runs/`; `--run-id` retains the fixed Kkachi-compatible layout. The original input remains unchanged.
+- Each summarize operation stores a complete raw-log copy in its artifact directory, so repeated summarization increases local storage usage in proportion to the source log size.
 - Summary JSON stores excerpt references relative to the summary directory, such as `excerpts/F001.log`. An absolute `--summary` input remains valid, while absolute, traversal, cross-run, dangling, and symlink-escaping embedded references fail with artifact exit code `3`.
 
 ## Exit code guidance
@@ -183,7 +185,7 @@ Status: failed
 Exit code: 1
 Duration: 0.0s
 Extractor: precise
-Raw log: fixtures/unit.raw.log
+Raw log: .kkachi/runs/summarize-example/artifacts/test/unit.raw.log
 Raw log SHA-256: sha256:...
 
 ## Failures
@@ -196,7 +198,7 @@ Raw log SHA-256: sha256:...
 
 ## Notes
 
-Command exit code is authoritative for `run`. Extraction rules only summarize evidence. Use `kkachi-agent-tester excerpt --summary fixtures/unit.summary.json F001` for deterministic excerpt lookup.
+Command exit code is authoritative for `run`. Extraction rules only summarize evidence. Use `kkachi-agent-tester excerpt --summary .kkachi/runs/summarize-example/artifacts/test/unit.summary.json F001` for deterministic excerpt lookup.
 ```
 
 ## UI backlog references

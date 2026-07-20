@@ -1,6 +1,6 @@
 # KAT Requirement Specs
 
-Status: v0.1 baseline complete; hardening requirements in progress (`HARDE-001` and `HARDE-002` complete)
+Status: v0.1 baseline complete; hardening requirements in progress (`HARDE-001` through `HARDE-003` complete)
 Scope: KAT v0.1 standalone baseline and post-baseline hardening
 Source context: KAS v0.2 / KAH v0.2 / KAT v0.1 / GJC delegated execution SOT, with KAT kept independent from KAS and KAH for this repository setup.
 
@@ -96,7 +96,7 @@ Implementation note: the original v0.1 roadmap is implemented. Repository review
 
 - [x] `KAT-REQ-RQHAR-001` Validate every artifact-bearing identifier and reference, reject path syntax in identifiers, and fail closed when a resolved path or symlink would escape its allowed artifact boundary.
 - [x] `KAT-REQ-RQHAR-002` Plan and open raw-log artifacts before command execution, handle operator interruption signals explicitly, forward termination to the child process, and preserve bounded partial raw/status evidence with an explicit non-pass state.
-- [ ] `KAT-REQ-RQHAR-003` Allocate collision-free standalone run directories so repeated executions in the same timestamp interval never overwrite earlier raw, summary, status, or excerpt artifacts.
+- [x] `KAT-REQ-RQHAR-003` Allocate collision-free standalone run directories so repeated executions in the same timestamp interval never overwrite earlier raw, summary, status, or excerpt artifacts.
 - [ ] `KAT-REQ-RQHAR-004` Apply configured redaction consistently to all surfaced summary, status, excerpt, and console-safe text and metadata while preserving original raw logs unchanged.
 - [ ] `KAT-REQ-RQHAR-005` Define one fail-closed contract for specialized-parser misses and internal errors, align implementation and documentation to that contract, and test `precise`, `partial`, `degraded`, `no_match`, and any retained `internal_error` behavior.
 - [ ] `KAT-REQ-RQHAR-006` Make every documented CLI option and example match executable behavior, including the disposition of `--verbose` and `--no-color`, self-contained rule examples, generated Markdown shape, and toolchain resolver/operator guidance.

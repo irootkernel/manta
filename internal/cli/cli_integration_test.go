@@ -450,7 +450,13 @@ func TestSummarizeRawLogUsesConfigRedaction(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("expected summarize command to succeed, got %d stderr=%s", exitCode, stderr.String())
 	}
-	summaryJSONPath := filepath.Join(rawDir, "unit.summary.json")
+	runsDir := filepath.Join(repo, ".kat", "runs")
+	entries, err := os.ReadDir(runsDir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("expected one standalone summarize directory, err=%v entries=%d", err, len(entries))
+	}
+	runDir := filepath.Join(runsDir, entries[0].Name())
+	summaryJSONPath := filepath.Join(runDir, "unit.summary.json")
 	summaryData, err := os.ReadFile(summaryJSONPath)
 	if err != nil {
 		t.Fatal(err)
@@ -468,6 +474,19 @@ func TestSummarizeRawLogUsesConfigRedaction(t *testing.T) {
 	if strings.Contains(summary.Failures[0].Signature, "secret") {
 		t.Fatalf("expected redacted summarized failure signature, got %q", summary.Failures[0].Signature)
 	}
+	if got, want := summary.RawLog, artifacts.Rel(repo, filepath.Join(runDir, "unit.raw.log")); got != want {
+		t.Fatalf("expected copied raw log reference %q, got %q", want, got)
+	}
+	copiedRaw, err := os.ReadFile(filepath.Join(runDir, "unit.raw.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(copiedRaw) != rawText {
+		t.Fatalf("expected copied raw evidence to match source, got %q", copiedRaw)
+	}
+	if _, err := os.Stat(filepath.Join(rawDir, "unit.summary.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected no summary beside input raw log, stat error=%v", err)
+	}
 	stdout.Reset()
 	stderr.Reset()
 	exitCode = Main([]string{"--repo", repo, "excerpt", "--summary", filepath.ToSlash(summaryJSONPath), "F001"}, &stdout, &stderr)
@@ -477,6 +496,94 @@ func TestSummarizeRawLogUsesConfigRedaction(t *testing.T) {
 	if !strings.Contains(stdout.String(), "token=<redacted>") {
 		t.Fatalf("expected redacted excerpt output after summarize, got %q", stdout.String())
 	}
+}
+
+func TestStandaloneOperationsUseDistinctRunDirectories(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".kkachi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configText := strings.Join([]string{
+		"version: 1",
+		"commands:",
+		"  unit:",
+		"    command: [\"sh\", \"configured.sh\"]",
+		"    lane: unit",
+		"    parser: generic",
+		"    timeout_sec: 10",
+	}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "configured.sh"), []byte("#!/bin/sh\nprintf 'configured\\n'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "adhoc.sh"), []byte("#!/bin/sh\nprintf 'adhoc\\n'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rawLogPath := filepath.Join(repo, "fixture.raw.log")
+	if err := os.WriteFile(rawLogPath, []byte("fixture\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	results := []runResult{
+		runJSONCommand(t, "--repo", repo, "--json", "run", "unit"),
+		runJSONCommand(t, "--repo", repo, "--json", "run", "unit"),
+		runJSONCommand(t, "--repo", repo, "--json", "run", "--lane", "unit", "sh", "adhoc.sh"),
+		runJSONCommand(t, "--repo", repo, "--json", "run", "--lane", "unit", "sh", "adhoc.sh"),
+		runJSONCommand(t, "--repo", repo, "--json", "summarize", filepath.ToSlash(rawLogPath)),
+		runJSONCommand(t, "--repo", repo, "--json", "summarize", filepath.ToSlash(rawLogPath)),
+		runJSONCommand(t, "--repo", repo, "--output-dir", "evidence", "--json", "summarize", filepath.ToSlash(rawLogPath)),
+		runJSONCommand(t, "--repo", repo, "--output-dir", "evidence", "--json", "summarize", filepath.ToSlash(rawLogPath)),
+	}
+
+	seen := make(map[string]bool, len(results))
+	for _, result := range results {
+		rawPath := filepath.Join(repo, filepath.FromSlash(result.RawLog))
+		baseDir := filepath.Dir(rawPath)
+		if seen[baseDir] {
+			t.Fatalf("standalone operation reused run directory %q", baseDir)
+		}
+		seen[baseDir] = true
+		data, err := os.ReadFile(rawPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		statusData, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(result.StatusJSON)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var status model.Status
+		if err := json.Unmarshal(statusData, &status); err != nil {
+			t.Fatal(err)
+		}
+		summaryData, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(status.SummaryPath)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var summary model.Summary
+		if err := json.Unmarshal(summaryData, &summary); err != nil {
+			t.Fatal(err)
+		}
+		wantSHA := artifacts.SHA256(data)
+		if summary.RawLogSHA256 != wantSHA || status.RawLogSHA256 != wantSHA {
+			t.Fatalf("raw checksum mismatch for %q: summary=%q status=%q want=%q", rawPath, summary.RawLogSHA256, status.RawLogSHA256, wantSHA)
+		}
+	}
+}
+
+func runJSONCommand(t *testing.T, args ...string) runResult {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	if exitCode := Main(args, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("command %q failed with exit %d: %s", args, exitCode, stderr.String())
+	}
+	var result runResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("decode command %q output %q: %v", args, stdout.String(), err)
+	}
+	return result
 }
 
 func TestAdHocRunWithoutConfig(t *testing.T) {
