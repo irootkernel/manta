@@ -15,6 +15,7 @@ import (
 )
 
 type binaryRunResult struct {
+	Command    string `json:"command"`
 	Summary    string `json:"summary"`
 	StatusJSON string `json:"status_json"`
 	RawLog     string `json:"raw_log"`
@@ -36,9 +37,9 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 	configText := strings.Join([]string{
 		"version: 1",
 		"commands:",
-		"  unit:",
-		"    command: [\"sh\", \"test.sh\"]",
-		"    lane: unit",
+		"  command_secret_id:",
+		"    command: [\"sh\", \"test.sh\", \"secret_arg\"]",
+		"    lane: lane-secret_lane",
 		"    parser: generic",
 		"    timeout_sec: 10",
 		"redaction:",
@@ -46,16 +47,19 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 		"    - name: token",
 		"      regex: 'token=[^ ]+'",
 		"      replace: 'token=<redacted>'",
+		"    - name: secret",
+		"      regex: 'secret_[a-z_]+'",
+		"      replace: '<redacted>'",
 	}, "\n") + "\n"
 	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	script := "#!/bin/sh\necho 'noise: start'\necho 'TypeError: token=secret failed'\necho 'src/foo.test.ts:42:13'\necho '✗ renders empty state'\nexit 1\n"
+	script := "#!/bin/sh\nprintf '%s\\n' \"$1\"\necho 'warning: secret_warning'\necho 'TypeError: token=secret secret_failure failed'\necho 'src/secret_path/foo.test.ts:42:13'\necho '✗ secret_test'\nexit 1\n"
 	if err := os.WriteFile(filepath.Join(repo, "test.sh"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	runCmd := exec.Command(bin, "--repo", repo, "run", "unit")
+	runCmd := exec.Command(bin, "--repo", repo, "run", "command_secret_id")
 	runCmd.Dir = repo
 	runOut, err := runCmd.CombinedOutput()
 	if err == nil {
@@ -68,8 +72,11 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 	if exitErr.ExitCode() != 1 {
 		t.Fatalf("expected underlying exit code 1, got %d output=%s", exitErr.ExitCode(), string(runOut))
 	}
-	if !strings.Contains(string(runOut), "Summary: .kat/runs/") {
+	if !strings.Contains(string(runOut), "Command: command_<redacted>") || !strings.Contains(string(runOut), "Summary: .kat/runs/") {
 		t.Fatalf("expected run output to report artifact paths, got %q", string(runOut))
+	}
+	if !strings.Contains(string(runOut), "command_secret_id.summary.md") {
+		t.Fatalf("expected run output to retain literal artifact reference, got %q", string(runOut))
 	}
 
 	runsDir := filepath.Join(repo, ".kat", "runs")
@@ -81,7 +88,7 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 		t.Fatalf("expected one run directory, got %d", len(entries))
 	}
 	runDir := filepath.Join(runsDir, entries[0].Name())
-	summaryPath := filepath.Join(runDir, "unit.summary.json")
+	summaryPath := filepath.Join(runDir, "command_secret_id.summary.json")
 	summaryData, err := os.ReadFile(summaryPath)
 	if err != nil {
 		t.Fatal(err)
@@ -93,8 +100,44 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 	if summary.Status != model.RunStatusFailed {
 		t.Fatalf("expected failed status, got %s", summary.Status)
 	}
-	if len(summary.Failures) != 1 || summary.Failures[0].ID != "F001" {
-		t.Fatalf("expected one extracted failure, got %+v", summary.Failures)
+	if summary.CommandID != "command_<redacted>" || summary.Lane != "lane-<redacted>" {
+		t.Fatalf("expected redacted binary summary metadata, got command=%q lane=%q", summary.CommandID, summary.Lane)
+	}
+	if len(summary.CommandArgv) != 3 || summary.CommandArgv[2] != "<redacted>" {
+		t.Fatalf("expected redacted binary argv, got %+v", summary.CommandArgv)
+	}
+	if len(summary.Failures) == 0 || len(summary.Warnings) != 1 {
+		t.Fatalf("expected extracted failures and warning, got failures=%+v warnings=%+v", summary.Failures, summary.Warnings)
+	}
+	for _, failure := range summary.Failures {
+		for _, value := range []string{failure.Signature, failure.File, failure.TestName, strings.Join(failure.StackTop, "\n")} {
+			if strings.Contains(value, "secret_") {
+				t.Fatalf("expected redacted binary failure metadata, got %q", value)
+			}
+		}
+	}
+	if strings.Contains(summary.Warnings[0].Signature, "secret_") {
+		t.Fatalf("expected redacted binary warning, got %q", summary.Warnings[0].Signature)
+	}
+	statusData, err := os.ReadFile(filepath.Join(runDir, "command_secret_id.status.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var status model.Status
+	if err := json.Unmarshal(statusData, &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.CommandID != summary.CommandID || status.Lane != summary.Lane || status.StatusHash != artifacts.ComputeStatusHash(status) {
+		t.Fatalf("expected redacted, self-consistent binary status, got %+v", status)
+	}
+	rawData, err := os.ReadFile(filepath.Join(runDir, "command_secret_id.raw.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"secret_arg", "secret_warning", "secret_failure", "secret_path", "secret_test"} {
+		if !strings.Contains(string(rawData), secret) {
+			t.Fatalf("expected binary raw log to preserve %q, got %q", secret, rawData)
+		}
 	}
 
 	excerptCmd := exec.Command(bin, "--repo", repo, "excerpt", "--summary", filepath.ToSlash(summaryPath), "F001")
@@ -106,26 +149,29 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 	if !strings.Contains(string(excerptOut), "token=<redacted>") {
 		t.Fatalf("expected redacted excerpt output, got %q", string(excerptOut))
 	}
+	if strings.Contains(string(excerptOut), "secret_") {
+		t.Fatalf("expected excerpt metadata to be redacted, got %q", string(excerptOut))
+	}
 	if err := os.Remove(summaryPath); err != nil {
 		t.Fatalf("remove summary before summarize: %v", err)
 	}
-	if err := os.Remove(filepath.Join(runDir, "unit.summary.md")); err != nil {
+	if err := os.Remove(filepath.Join(runDir, "command_secret_id.summary.md")); err != nil {
 		t.Fatalf("remove markdown before summarize: %v", err)
 	}
-	if err := os.Remove(filepath.Join(runDir, "unit.status.json")); err != nil {
+	if err := os.Remove(filepath.Join(runDir, "command_secret_id.status.json")); err != nil {
 		t.Fatalf("remove status before summarize: %v", err)
 	}
 	if err := os.RemoveAll(filepath.Join(runDir, "excerpts")); err != nil {
 		t.Fatalf("remove excerpts before summarize: %v", err)
 	}
 
-	summarizeCmd := exec.Command(bin, "--repo", repo, "summarize", filepath.ToSlash(filepath.Join(runDir, "unit.raw.log")))
+	summarizeCmd := exec.Command(bin, "--repo", repo, "summarize", filepath.ToSlash(filepath.Join(runDir, "command_secret_id.raw.log")))
 	summarizeCmd.Dir = repo
 	summarizeOut, err := summarizeCmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected summarize command to succeed, err=%v output=%s", err, string(summarizeOut))
 	}
-	if !strings.Contains(string(summarizeOut), "Summary: .kat/runs/") {
+	if !strings.Contains(string(summarizeOut), "Command: command_<redacted>") || !strings.Contains(string(summarizeOut), "Summary: .kat/runs/") {
 		t.Fatalf("expected summarize output to report artifact paths, got %q", string(summarizeOut))
 	}
 	entries, err = os.ReadDir(runsDir)
@@ -146,7 +192,7 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 	if summarizeDir == "" {
 		t.Fatal("expected a distinct summarize directory")
 	}
-	summaryPath = filepath.Join(summarizeDir, "unit.summary.json")
+	summaryPath = filepath.Join(summarizeDir, "command_secret_id.summary.json")
 	summaryData, err = os.ReadFile(summaryPath)
 	if err != nil {
 		t.Fatalf("expected summarize to create summary in a new run: %v", err)
@@ -154,8 +200,11 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 	if err := json.Unmarshal(summaryData, &summary); err != nil {
 		t.Fatal(err)
 	}
-	if summary.Status != model.RunStatusFailed || len(summary.Failures) != 1 {
-		t.Fatalf("expected summarize to create failed summary with one failure, got %+v", summary)
+	if summary.Status != model.RunStatusFailed || len(summary.Failures) == 0 {
+		t.Fatalf("expected summarize to create failed summary with failures, got %+v", summary)
+	}
+	if summary.CommandID != "command_<redacted>" || summary.Lane != "command_<redacted>" {
+		t.Fatalf("expected redacted binary summarize metadata, got command=%q lane=%q", summary.CommandID, summary.Lane)
 	}
 	excerptOut, err = exec.Command(bin, "--repo", repo, "excerpt", "--summary", filepath.ToSlash(summaryPath), "F001").CombinedOutput()
 	if err != nil {
@@ -163,6 +212,52 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 	}
 	if !strings.Contains(string(excerptOut), "token=<redacted>") {
 		t.Fatalf("expected redacted excerpt output after summarize, got %q", string(excerptOut))
+	}
+	if strings.Contains(string(excerptOut), "secret_") {
+		t.Fatalf("expected summarized excerpt metadata to be redacted, got %q", string(excerptOut))
+	}
+}
+
+func TestBinaryJSONRedactsCommandMetadata(t *testing.T) {
+	t.Parallel()
+	root := projectRoot(t)
+	bin := buildBinary(t, root)
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".kkachi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configText := strings.Join([]string{
+		"version: 1",
+		"commands:",
+		"  json_secret_id:",
+		"    command: [\"sh\", \"test.sh\", \"secret_arg\"]",
+		"    lane: lane-secret_lane",
+		"    parser: generic",
+		"    timeout_sec: 10",
+		"redaction:",
+		"  patterns:",
+		"    - name: secret",
+		"      regex: 'secret_[a-z_]+'",
+		"      replace: '<redacted>'",
+	}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "test.sh"), []byte("#!/bin/sh\nprintf '%s\\n' \"$1\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result := runBinaryJSON(t, bin, repo, "run", "json_secret_id")
+	if result.Command != "json_<redacted>" {
+		t.Fatalf("expected redacted binary JSON command, got %q", result.Command)
+	}
+	for _, path := range []string{result.Summary, result.StatusJSON, result.RawLog} {
+		if !strings.Contains(path, "json_secret_id") {
+			t.Fatalf("expected literal binary JSON artifact reference, got %q", path)
+		}
+		if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(path))); err != nil {
+			t.Fatalf("expected binary JSON artifact reference %q to resolve: %v", path, err)
+		}
 	}
 }
 

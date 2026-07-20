@@ -15,6 +15,15 @@ const (
 	MaxBlockLines      = 160
 )
 
+type redactionRule struct {
+	re          *regexp.Regexp
+	replacement string
+}
+
+type Redactor struct {
+	rules []redactionRule
+}
+
 func ValidateRegex(regex string) error {
 	if _, err := regexp.Compile(regex); err != nil {
 		return model.NewKATError(model.ExitCodeConfigError, "validate regex", err)
@@ -36,16 +45,24 @@ func BoundLines(lines []string, limit int) []string {
 	return append([]string(nil), lines[:limit]...)
 }
 
-func ApplyRedaction(text string, patterns []model.RedactionPattern) (string, error) {
-	redacted := text
+func NewRedactor(patterns []model.RedactionPattern) (Redactor, error) {
+	redactor := Redactor{rules: make([]redactionRule, 0, len(patterns))}
 	for _, pattern := range patterns {
-		if err := ValidateRegex(pattern.Regex); err != nil {
-			return "", err
+		re, err := regexp.Compile(pattern.Regex)
+		if err != nil {
+			return Redactor{}, model.NewKATError(model.ExitCodeConfigError, "validate regex", err)
 		}
-		re, _ := regexp.Compile(pattern.Regex)
-		redacted = re.ReplaceAllString(redacted, pattern.Replace)
+		redactor.rules = append(redactor.rules, redactionRule{re: re, replacement: pattern.Replace})
 	}
-	return redacted, nil
+	return redactor, nil
+}
+
+func (r Redactor) Apply(text string) string {
+	redacted := text
+	for _, rule := range r.rules {
+		redacted = rule.re.ReplaceAllString(redacted, rule.replacement)
+	}
+	return redacted
 }
 
 func FilterNoise(text string, filters []string) string {

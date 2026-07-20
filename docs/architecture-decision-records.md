@@ -59,7 +59,7 @@ Large raw logs are expensive for human and LLM review, but auditability requires
 
 ### Decision
 
-KAT always preserves raw logs and writes compact summary JSON, summary Markdown, status JSON, and bounded excerpts. Noise filters affect summaries, not raw logs. Redaction applies to surfaced artifacts. Raw logs remain original evidence and are not redacted by default; operators must be warned that raw logs may contain unredacted values.
+KAT always preserves raw logs and writes compact summary JSON, summary Markdown, status JSON, and bounded excerpts. Noise filters affect summaries, not raw logs. Redaction applies to surfaced command metadata and extracted evidence. Raw logs remain original evidence and are not redacted by default; operators must be warned that raw logs may contain unredacted values. Stable artifact-reference fields remain literal locators so deterministic consumers can resolve them.
 
 ### Consequences
 
@@ -67,6 +67,7 @@ KAT always preserves raw logs and writes compact summary JSON, summary Markdown,
 - Raw evidence remains available for audit and rule improvement.
 - Summary artifacts can be consumed by GJC, no-agent watchers, or humans.
 - Raw-log sharing must be treated as a deliberate operator action.
+- Run IDs, command IDs, output directories, and other artifact-bearing path components must not contain secrets because usable artifact references are not rewritten by redaction.
 
 ## ADR-0004: YAML project config with explicit argv command entries
 
@@ -99,12 +100,13 @@ Kkachi's delegated execution model should not spend LLM tokens while waiting for
 
 ### Decision
 
-KAT writes compact status JSON for polling. Watcher compatibility is defined by hashing exactly these ordered fields: `command_id`, `status`, `exit_code`, `extractor_status`, `raw_log_sha256`, `failure_signatures`, `warning_signatures`, `summary_path`, and `raw_log_path`.
+KAT writes compact status JSON for polling. Configured redaction is applied to surfaced command ID, lane, and failure/warning signatures before their hashes are calculated. Watcher compatibility is defined by hashing exactly these ordered fields: `command_id`, `status`, `exit_code`, `extractor_status`, `raw_log_sha256`, `failure_signatures`, `warning_signatures`, `summary_path`, and `raw_log_path`. Path fields remain literal references.
 
 ### Consequences
 
 - KAT supports no-agent polling without embedding watcher logic.
 - Status fields and path references must stay stable.
+- `status_hash` is calculated after redaction from the final surfaced values.
 - Full review remains outside KAT.
 
 ## ADR-0006: Go single-binary implementation baseline

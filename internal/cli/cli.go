@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -338,13 +339,17 @@ func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.Ar
 		}
 	}
 	metadata := runOutput.Metadata
+	redactor, err := safety.NewRedactor(cfg.Redaction.Patterns)
+	if err != nil {
+		return runResult{}, model.RunOutput{}, err
+	}
 
 	summary := model.Summary{
 		Status:          runOutput.Status,
 		CommandID:       metadata.CommandID,
 		Lane:            metadata.Lane,
 		Parser:          metadata.Parser,
-		CommandArgv:     metadata.CommandArgv,
+		CommandArgv:     slices.Clone(metadata.CommandArgv),
 		ExitCode:        metadata.ExitCode,
 		StartedAt:       metadata.StartedAt,
 		EndedAt:         metadata.EndedAt,
@@ -354,15 +359,13 @@ func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.Ar
 		ExtractorStatus: runOutput.ExtractorStatus,
 		FailureCount:    len(runOutput.Failures),
 		WarningCount:    len(runOutput.Warnings),
-		Failures:        append([]model.Failure(nil), runOutput.Failures...),
-		Warnings:        append([]model.Warning(nil), runOutput.Warnings...),
+		Failures:        cloneFailures(runOutput.Failures),
+		Warnings:        slices.Clone(runOutput.Warnings),
 	}
-	if err := writeExcerpts(cfg, paths, runOutput.RawLogBytes, &summary); err != nil {
+	if err := writeExcerpts(redactor, cfg.NoiseFilters, paths, runOutput.RawLogBytes, &summary); err != nil {
 		return runResult{}, model.RunOutput{}, err
 	}
-	if err := redactSummary(&summary, cfg); err != nil {
-		return runResult{}, model.RunOutput{}, err
-	}
+	redactSummary(&summary, redactor, cfg.NoiseFilters)
 	summarySHA, err := artifacts.WriteSummaryJSON(paths, summary)
 	if err != nil {
 		return runResult{}, model.RunOutput{}, err
@@ -372,8 +375,8 @@ func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.Ar
 	}
 	statusDoc := model.Status{
 		Status:            runOutput.Status,
-		CommandID:         metadata.CommandID,
-		Lane:              metadata.Lane,
+		CommandID:         summary.CommandID,
+		Lane:              summary.Lane,
 		ExitCode:          metadata.ExitCode,
 		ExtractorStatus:   runOutput.ExtractorStatus,
 		SummaryPath:       artifacts.Rel(req.RepoRoot, paths.SummaryJSON),
@@ -390,7 +393,7 @@ func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.Ar
 	}
 
 	result := runResult{
-		Command:    metadata.CommandID,
+		Command:    summary.CommandID,
 		Status:     runOutput.Status,
 		ExitCode:   metadata.ExitCode,
 		DurationMS: metadata.DurationMS,
@@ -413,16 +416,12 @@ func inferSummarizeStatus(raw []byte) (model.RunStatus, int) {
 	return model.RunStatusPassed, 0
 }
 
-func writeExcerpts(cfg model.Config, paths model.ArtifactPaths, raw []byte, summary *model.Summary) error {
+func writeExcerpts(redactor safety.Redactor, noiseFilters []string, paths model.ArtifactPaths, raw []byte, summary *model.Summary) error {
 	text := string(raw)
 	for i := range summary.Failures {
 		failure := &summary.Failures[i]
 		content := excerptContent(text, failure.RawSpan)
-		redacted, err := safety.ApplyRedaction(content, cfg.Redaction.Patterns)
-		if err != nil {
-			return err
-		}
-		redacted = safety.FilterNoise(redacted, cfg.NoiseFilters)
+		redacted := safety.FilterNoise(redactor.Apply(content), noiseFilters)
 		redacted = safety.BoundBytes(redacted, safety.MaxExcerptBytes)
 		if err := safety.ValidateArtifactIdentifier("failure id", failure.ID); err != nil {
 			return model.NewKATError(model.ExitCodeArtifactError, "write excerpt", err)
@@ -436,52 +435,49 @@ func writeExcerpts(cfg model.Config, paths model.ArtifactPaths, raw []byte, summ
 	return nil
 }
 
-func redactSummary(summary *model.Summary, cfg model.Config) error {
+func redactSummary(summary *model.Summary, redactor safety.Redactor, noiseFilters []string) {
+	summary.CommandID = redactor.Apply(summary.CommandID)
+	summary.Lane = redactor.Apply(summary.Lane)
+	summary.Parser = redactor.Apply(summary.Parser)
+	for i := range summary.CommandArgv {
+		summary.CommandArgv[i] = redactor.Apply(summary.CommandArgv[i])
+	}
+	redactEvidence := func(text string) string {
+		return strings.TrimSpace(safety.FilterNoise(redactor.Apply(text), noiseFilters))
+	}
 	for i := range summary.Failures {
-		redacted, err := safety.ApplyRedaction(summary.Failures[i].Signature, cfg.Redaction.Patterns)
-		if err != nil {
-			return err
+		failure := &summary.Failures[i]
+		failure.Signature = redactEvidence(failure.Signature)
+		if failure.TestName != "" {
+			failure.TestName = redactEvidence(failure.TestName)
 		}
-		summary.Failures[i].Signature = strings.TrimSpace(safety.FilterNoise(redacted, cfg.NoiseFilters))
-		if summary.Failures[i].TestName != "" {
-			redacted, err = safety.ApplyRedaction(summary.Failures[i].TestName, cfg.Redaction.Patterns)
-			if err != nil {
-				return err
-			}
-			summary.Failures[i].TestName = strings.TrimSpace(safety.FilterNoise(redacted, cfg.NoiseFilters))
+		if failure.File != "" {
+			failure.File = strings.TrimSpace(redactor.Apply(failure.File))
 		}
-		if summary.Failures[i].File != "" {
-			redacted, err = safety.ApplyRedaction(summary.Failures[i].File, cfg.Redaction.Patterns)
-			if err != nil {
-				return err
-			}
-			summary.Failures[i].File = strings.TrimSpace(redacted)
-		}
-		for j := range summary.Failures[i].StackTop {
-			redacted, err = safety.ApplyRedaction(summary.Failures[i].StackTop[j], cfg.Redaction.Patterns)
-			if err != nil {
-				return err
-			}
-			summary.Failures[i].StackTop[j] = strings.TrimSpace(redacted)
+		for j := range failure.StackTop {
+			failure.StackTop[j] = strings.TrimSpace(redactor.Apply(failure.StackTop[j]))
 		}
 	}
 	warnings := make([]model.Warning, 0, len(summary.Warnings))
-	for i := range summary.Warnings {
-		redacted, err := safety.ApplyRedaction(summary.Warnings[i].Signature, cfg.Redaction.Patterns)
-		if err != nil {
-			return err
-		}
-		redacted = strings.TrimSpace(safety.FilterNoise(redacted, cfg.NoiseFilters))
+	for _, warning := range summary.Warnings {
+		redacted := redactEvidence(warning.Signature)
 		if redacted == "" {
 			continue
 		}
-		summary.Warnings[i].Signature = redacted
-		warnings = append(warnings, summary.Warnings[i])
+		warning.Signature = redacted
+		warnings = append(warnings, warning)
 	}
 	summary.Warnings = warnings
 	summary.WarningCount = len(summary.Warnings)
 	summary.FailureCount = len(summary.Failures)
-	return nil
+}
+
+func cloneFailures(failures []model.Failure) []model.Failure {
+	cloned := slices.Clone(failures)
+	for i := range cloned {
+		cloned[i].StackTop = slices.Clone(failures[i].StackTop)
+	}
+	return cloned
 }
 
 func excerptContent(text string, span model.RawSpan) string {

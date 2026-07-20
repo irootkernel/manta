@@ -62,7 +62,7 @@ CLI
 6. Runner executes the command in the selected working directory and streams stdout/stderr into the raw log.
 7. CLI closes and validates the contained raw log, then the extraction engine processes the captured raw bytes with the selected parser plus project rules.
 8. Redactor and noise filters shape surfaced artifacts.
-9. Artifact writer writes summary JSON, summary Markdown, excerpts, and status JSON.
+9. Artifact writer writes bounded excerpts, summary JSON, summary Markdown, and status JSON.
 10. CLI exits with the underlying test command status or a documented KAT internal error code.
 ```
 
@@ -78,7 +78,7 @@ On Unix, the runner starts the command in its own process group. SIGINT and SIGT
 5. Artifact writer reserves a standalone run directory, or uses the fixed `--run-id` layout, and copies the original raw bytes into it.
 6. Extraction engine applies the `generic` parser plus matching project rules to the copied evidence.
 7. Redactor and noise filters shape surfaced artifacts.
-8. Artifact writer writes summary JSON, summary Markdown, excerpts, and status JSON in the same artifact layout.
+8. Artifact writer writes bounded excerpts, summary JSON, summary Markdown, and status JSON in the same artifact layout.
 9. CLI exits `0` when summarization succeeds because no test command was executed in this mode.
 ```
 
@@ -243,7 +243,9 @@ Command execution status is authoritative. Parser quality only affects evidence 
 
 - Raw logs are preserved as original source evidence.
 - Raw logs are not redacted by default.
-- Summaries, excerpts, status JSON, and console-safe surfaced text do apply redaction.
+- Summaries, excerpts, status JSON, and console-safe surfaced text apply configured redaction to command metadata and extracted evidence, including command argv, identifiers, lanes, failure source paths, signatures, test names, stack entries, and warnings.
+- Artifact-reference fields such as `raw_log`, `summary_path`, `raw_log_path`, and excerpt references remain literal locators so watcher, KAH, and operator consumers can resolve them. Operators must not place secrets in artifact-bearing identifiers or paths.
+- Status signature hashes and `status_hash` are computed from the final redacted metadata and signatures while retaining the existing ordered watcher field set.
 - Documentation and CLI output should warn that raw logs may contain unredacted secrets or sensitive values and should be shared cautiously.
 
 ## Extension points

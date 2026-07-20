@@ -1,6 +1,6 @@
 # KAT Implementation Note
 
-Status: v0.1 baseline complete; HARDE hardening in progress (`HARDE-001` and `HARDE-002` complete)
+Status: v0.1 baseline complete; HARDE hardening in progress (`HARDE-001` through `HARDE-004` complete)
 Scope: Guidance for implementing complex KAT v0.1 and post-baseline hardening areas without KAS/KAH dependency
 
 ## Implementation posture
@@ -47,7 +47,7 @@ internal/safety/
 
 - Plan artifact paths before execution starts.
 - Ensure parent directories exist before writing.
-- Write raw logs first, then summary JSON, summary Markdown, excerpts, and status JSON.
+- Write raw logs first, then bounded excerpts, summary JSON, summary Markdown, and status JSON.
 - Include SHA-256 for raw logs and summary JSON.
 - Use relative paths in JSON where practical so artifacts remain movable within a repository.
 - Validate run IDs, configured command IDs, rule IDs, and generated failure IDs with `[A-Za-z0-9][A-Za-z0-9_-]*` before using them in artifact paths.
@@ -151,11 +151,12 @@ Validation rejects missing IDs, missing provenance, duplicate IDs, excessive `ma
 Apply in this order for surfaced artifacts:
 
 1. Extract bounded spans from raw log.
-2. Apply redaction to surfaced text.
-3. Apply noise filtering where appropriate for summaries.
-4. Write summary/excerpt/status artifacts.
+2. Copy execution metadata and extracted evidence into a surface-only summary.
+3. Redact and noise-filter bounded excerpts before writing them.
+4. Redact summary metadata and evidence, then write the summary artifacts.
+5. Derive status hashes and console metadata from the redacted summary, retaining literal artifact references.
 
-Raw-log policy is fixed: raw logs remain original local evidence and are not redacted by default. Docs and CLI output should warn that raw logs may contain unredacted values.
+Raw-log policy is fixed: raw logs remain original local evidence and are not redacted by default. Artifact-reference fields remain literal and usable, so operators must not place secrets in artifact-bearing IDs or paths. Docs and CLI output should warn that raw logs may contain unredacted values.
 
 ## Testing guidance
 
@@ -166,7 +167,8 @@ Tests should cover:
 - Failing command with no parser match, producing degraded extraction.
 - Timeout with partial log.
 - Built-binary SIGINT and SIGTERM handling on Unix across standalone and `--run-id` layouts, including process-group forwarding, partial raw evidence, `killed` status, and exit codes `130` and `143`.
-- Redaction in summary and excerpts.
+- Redaction of summary/status/console command metadata, failure/warning fields, and excerpts, with hashes calculated from final redacted values.
+- Literal artifact references remaining resolvable even when command metadata is redacted.
 - Noise filtering in summary while raw log remains unchanged.
 - Rule test with expected span.
 - Rule overmatch rejection.

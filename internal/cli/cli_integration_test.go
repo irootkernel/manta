@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -129,6 +130,232 @@ func TestConfiguredRunAndExcerpt(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "token=<redacted>") {
 		t.Fatalf("expected redacted excerpt output, got %q", stdout.String())
+	}
+}
+
+func TestConfiguredRunRedactsSurfacedMetadata(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".kkachi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configText := strings.Join([]string{
+		"version: 1",
+		"commands:",
+		"  command_secret_id:",
+		"    command: [\"sh\", \"test.sh\", \"secret_arg\"]",
+		"    lane: lane-secret_lane",
+		"    parser: generic",
+		"    timeout_sec: 10",
+		"redaction:",
+		"  patterns:",
+		"    - name: secret",
+		"      regex: 'secret_[a-z_]+'",
+		"      replace: '<redacted>'",
+	}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	script := strings.Join([]string{
+		"#!/bin/sh",
+		"printf '%s\\n' \"$1\"",
+		"echo 'warning: secret_warning'",
+		"echo 'TypeError: secret_failure failed'",
+		"echo 'src/secret_path/foo.test.ts:42:13'",
+		"echo '✗ secret_test'",
+		"exit 1",
+		"",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(repo, "test.sh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	exitCode := Main([]string{"--repo", repo, "--json", "run", "command_secret_id"}, &stdout, &stderr)
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d stderr=%s", exitCode, stderr.String())
+	}
+	var result runResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("decode JSON result %q: %v", stdout.String(), err)
+	}
+	if result.Command != "command_<redacted>" {
+		t.Fatalf("expected redacted result command, got %q", result.Command)
+	}
+	for _, path := range []string{result.Summary, result.StatusJSON, result.RawLog} {
+		if !strings.Contains(path, "command_secret_id") {
+			t.Fatalf("expected literal artifact reference, got %q", path)
+		}
+		if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(path))); err != nil {
+			t.Fatalf("expected artifact reference %q to resolve: %v", path, err)
+		}
+	}
+
+	statusData, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(result.StatusJSON)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var status model.Status
+	if err := json.Unmarshal(statusData, &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.CommandID != "command_<redacted>" || status.Lane != "lane-<redacted>" {
+		t.Fatalf("expected redacted status metadata, got command=%q lane=%q", status.CommandID, status.Lane)
+	}
+	if status.StatusHash != artifacts.ComputeStatusHash(status) {
+		t.Fatalf("status hash was not computed from final surfaced fields: %+v", status)
+	}
+
+	summaryData, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(status.SummaryPath)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var summary model.Summary
+	if err := json.Unmarshal(summaryData, &summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary.CommandID != "command_<redacted>" || summary.Lane != "lane-<redacted>" || summary.Parser != "generic" {
+		t.Fatalf("expected redacted summary metadata, got command=%q lane=%q parser=%q", summary.CommandID, summary.Lane, summary.Parser)
+	}
+	if len(summary.CommandArgv) != 3 || summary.CommandArgv[2] != "<redacted>" {
+		t.Fatalf("expected redacted command argv, got %+v", summary.CommandArgv)
+	}
+	if len(summary.Failures) == 0 || len(summary.Warnings) != 1 {
+		t.Fatalf("expected failures and one warning, got failures=%+v warnings=%+v", summary.Failures, summary.Warnings)
+	}
+	for _, failure := range summary.Failures {
+		assertNoSecret(t, "failure signature", failure.Signature)
+		assertNoSecret(t, "failure test name", failure.TestName)
+		assertNoSecret(t, "failure file", failure.File)
+		for _, stackLine := range failure.StackTop {
+			assertNoSecret(t, "failure stack", stackLine)
+		}
+	}
+	assertNoSecret(t, "warning signature", summary.Warnings[0].Signature)
+	if len(status.FailureSignatures) != len(summary.Failures) {
+		t.Fatalf("expected failure hashes from redacted signatures, got %+v", status.FailureSignatures)
+	}
+	for _, failure := range summary.Failures {
+		want := artifacts.SHA256([]byte(failure.Signature))
+		if !slices.Contains(status.FailureSignatures, want) {
+			t.Fatalf("expected redacted failure hash %q in %+v", want, status.FailureSignatures)
+		}
+	}
+	if len(status.WarningSignatures) != 1 || status.WarningSignatures[0] != artifacts.SHA256([]byte(summary.Warnings[0].Signature)) {
+		t.Fatalf("expected warning hash from redacted signature, got %+v", status.WarningSignatures)
+	}
+
+	for _, failure := range summary.Failures {
+		excerptPath := filepath.Join(filepath.Dir(filepath.Join(repo, filepath.FromSlash(status.SummaryPath))), filepath.FromSlash(failure.Excerpt))
+		excerptData, err := os.ReadFile(excerptPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertNoSecret(t, "excerpt", string(excerptData))
+	}
+	rawData, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(result.RawLog)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"secret_arg", "secret_warning", "secret_failure", "secret_path", "secret_test"} {
+		if !strings.Contains(string(rawData), secret) {
+			t.Fatalf("expected raw log to preserve %q, got %q", secret, rawData)
+		}
+	}
+	if got := artifacts.SHA256(rawData); summary.RawLogSHA256 != got || status.RawLogSHA256 != got {
+		t.Fatalf("raw checksum mismatch: summary=%q status=%q want=%q", summary.RawLogSHA256, status.RawLogSHA256, got)
+	}
+
+	markdownData, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(result.Summary)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(markdownData), "# KAT Summary: command_<redacted>") {
+		t.Fatalf("expected redacted markdown heading, got %q", markdownData)
+	}
+	if !strings.Contains(string(markdownData), "command_secret_id.raw.log") {
+		t.Fatalf("expected literal raw-log reference in markdown, got %q", markdownData)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	exitCode = Main([]string{"--repo", repo, "run", "command_secret_id"}, &stdout, &stderr)
+	if exitCode != 1 {
+		t.Fatalf("expected human run exit code 1, got %d stderr=%s", exitCode, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Command: command_<redacted>") {
+		t.Fatalf("expected redacted human command metadata, got %q", stdout.String())
+	}
+}
+
+func TestAdHocRunRedactsSurfacedMetadata(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".kkachi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configText := strings.Join([]string{
+		"version: 1",
+		"redaction:",
+		"  patterns:",
+		"    - name: secret",
+		"      regex: 'secret_[a-z_]+'",
+		"      replace: '<redacted>'",
+	}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "adhoc.sh"), []byte("#!/bin/sh\nprintf '%s\\n' \"$1\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result := runJSONCommand(t, "--repo", repo, "--json", "run", "--lane", "lane-secret_lane", "sh", "adhoc.sh", "secret_arg")
+	if !strings.HasPrefix(result.Command, "lane-<redacted>-") || strings.Contains(result.Command, "secret_") {
+		t.Fatalf("expected redacted generated command id, got %q", result.Command)
+	}
+	for _, path := range []string{result.Summary, result.StatusJSON, result.RawLog} {
+		if !strings.Contains(path, "secret_lane") {
+			t.Fatalf("expected literal artifact reference, got %q", path)
+		}
+		if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(path))); err != nil {
+			t.Fatalf("expected artifact reference %q to resolve: %v", path, err)
+		}
+	}
+
+	statusData, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(result.StatusJSON)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var status model.Status
+	if err := json.Unmarshal(statusData, &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.CommandID != result.Command || status.Lane != "lane-<redacted>" || status.StatusHash != artifacts.ComputeStatusHash(status) {
+		t.Fatalf("expected redacted, self-consistent ad-hoc status, got %+v", status)
+	}
+	summaryData, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(status.SummaryPath)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var summary model.Summary
+	if err := json.Unmarshal(summaryData, &summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary.CommandID != result.Command || summary.Lane != "lane-<redacted>" || summary.Parser != "generic" {
+		t.Fatalf("expected redacted ad-hoc summary metadata, got command=%q lane=%q parser=%q", summary.CommandID, summary.Lane, summary.Parser)
+	}
+	if len(summary.CommandArgv) != 3 || summary.CommandArgv[2] != "<redacted>" {
+		t.Fatalf("expected redacted ad-hoc argv, got %+v", summary.CommandArgv)
+	}
+	rawData, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(result.RawLog)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(rawData) != "secret_arg\n" {
+		t.Fatalf("expected exact unredacted ad-hoc raw log, got %q", rawData)
+	}
+	if want := artifacts.SHA256(rawData); summary.RawLogSHA256 != want || status.RawLogSHA256 != want {
+		t.Fatalf("ad-hoc raw checksum mismatch: summary=%q status=%q want=%q", summary.RawLogSHA256, status.RawLogSHA256, want)
 	}
 }
 
@@ -426,6 +653,9 @@ func TestSummarizeRawLogUsesConfigRedaction(t *testing.T) {
 		"    - name: token",
 		"      regex: 'token=[^ ]+'",
 		"      replace: 'token=<redacted>'",
+		"    - name: identifier",
+		"      regex: 'secret_[a-z_]+'",
+		"      replace: '<redacted>'",
 	}, "\n") + "\n"
 	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
 		t.Fatal(err)
@@ -434,7 +664,7 @@ func TestSummarizeRawLogUsesConfigRedaction(t *testing.T) {
 	if err := os.MkdirAll(rawDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	rawLogPath := filepath.Join(rawDir, "unit.raw.log")
+	rawLogPath := filepath.Join(rawDir, "unit_secret_id.raw.log")
 	rawText := strings.Join([]string{
 		"noise: start",
 		"TypeError: token=secret failed",
@@ -445,10 +675,14 @@ func TestSummarizeRawLogUsesConfigRedaction(t *testing.T) {
 	if err := os.WriteFile(rawLogPath, []byte(rawText), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	var stdout, stderr bytes.Buffer
-	exitCode := Main([]string{"--repo", repo, "summarize", filepath.ToSlash(rawLogPath)}, &stdout, &stderr)
-	if exitCode != 0 {
-		t.Fatalf("expected summarize command to succeed, got %d stderr=%s", exitCode, stderr.String())
+	result := runJSONCommand(t, "--repo", repo, "--json", "summarize", filepath.ToSlash(rawLogPath))
+	if result.Command != "unit_<redacted>" {
+		t.Fatalf("expected redacted summarize JSON command, got %q", result.Command)
+	}
+	for _, path := range []string{result.Summary, result.StatusJSON, result.RawLog} {
+		if !strings.Contains(path, "unit_secret_id") {
+			t.Fatalf("expected literal summarize artifact reference, got %q", path)
+		}
 	}
 	runsDir := filepath.Join(repo, ".kat", "runs")
 	entries, err := os.ReadDir(runsDir)
@@ -456,7 +690,7 @@ func TestSummarizeRawLogUsesConfigRedaction(t *testing.T) {
 		t.Fatalf("expected one standalone summarize directory, err=%v entries=%d", err, len(entries))
 	}
 	runDir := filepath.Join(runsDir, entries[0].Name())
-	summaryJSONPath := filepath.Join(runDir, "unit.summary.json")
+	summaryJSONPath := filepath.Join(runDir, "unit_secret_id.summary.json")
 	summaryData, err := os.ReadFile(summaryJSONPath)
 	if err != nil {
 		t.Fatal(err)
@@ -468,33 +702,64 @@ func TestSummarizeRawLogUsesConfigRedaction(t *testing.T) {
 	if summary.Status != model.RunStatusFailed {
 		t.Fatalf("expected failed summarized status, got %s", summary.Status)
 	}
+	if summary.CommandArgv == nil {
+		t.Fatal("expected summarize command_argv to remain an empty array")
+	}
+	if summary.CommandID != "unit_<redacted>" || summary.Lane != "unit_<redacted>" {
+		t.Fatalf("expected redacted summarize identifiers, got command=%q lane=%q", summary.CommandID, summary.Lane)
+	}
 	if len(summary.Failures) != 1 {
 		t.Fatalf("expected one failure, got %d", len(summary.Failures))
 	}
 	if strings.Contains(summary.Failures[0].Signature, "secret") {
 		t.Fatalf("expected redacted summarized failure signature, got %q", summary.Failures[0].Signature)
 	}
-	if got, want := summary.RawLog, artifacts.Rel(repo, filepath.Join(runDir, "unit.raw.log")); got != want {
+	if got, want := summary.RawLog, artifacts.Rel(repo, filepath.Join(runDir, "unit_secret_id.raw.log")); got != want {
 		t.Fatalf("expected copied raw log reference %q, got %q", want, got)
 	}
-	copiedRaw, err := os.ReadFile(filepath.Join(runDir, "unit.raw.log"))
+	statusData, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(result.StatusJSON)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var status model.Status
+	if err := json.Unmarshal(statusData, &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.CommandID != summary.CommandID || status.Lane != summary.Lane || status.StatusHash != artifacts.ComputeStatusHash(status) {
+		t.Fatalf("expected redacted, self-consistent summarize status, got %+v", status)
+	}
+	for _, path := range []string{status.SummaryPath, status.RawLogPath} {
+		if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(path))); err != nil {
+			t.Fatalf("expected summarize status reference %q to resolve: %v", path, err)
+		}
+	}
+	copiedRaw, err := os.ReadFile(filepath.Join(runDir, "unit_secret_id.raw.log"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(copiedRaw) != rawText {
 		t.Fatalf("expected copied raw evidence to match source, got %q", copiedRaw)
 	}
-	if _, err := os.Stat(filepath.Join(rawDir, "unit.summary.json")); !os.IsNotExist(err) {
+	if want := artifacts.SHA256(copiedRaw); summary.RawLogSHA256 != want || status.RawLogSHA256 != want {
+		t.Fatalf("summarize raw checksum mismatch: summary=%q status=%q want=%q", summary.RawLogSHA256, status.RawLogSHA256, want)
+	}
+	if _, err := os.Stat(filepath.Join(rawDir, "unit_secret_id.summary.json")); !os.IsNotExist(err) {
 		t.Fatalf("expected no summary beside input raw log, stat error=%v", err)
 	}
-	stdout.Reset()
-	stderr.Reset()
-	exitCode = Main([]string{"--repo", repo, "excerpt", "--summary", filepath.ToSlash(summaryJSONPath), "F001"}, &stdout, &stderr)
+	var stdout, stderr bytes.Buffer
+	exitCode := Main([]string{"--repo", repo, "excerpt", "--summary", filepath.ToSlash(summaryJSONPath), "F001"}, &stdout, &stderr)
 	if exitCode != 0 {
 		t.Fatalf("expected excerpt command to succeed after summarize, got %d stderr=%s", exitCode, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "token=<redacted>") {
 		t.Fatalf("expected redacted excerpt output after summarize, got %q", stdout.String())
+	}
+}
+
+func assertNoSecret(t *testing.T, label, value string) {
+	t.Helper()
+	if strings.Contains(value, "secret_") {
+		t.Fatalf("expected redacted %s, got %q", label, value)
 	}
 }
 

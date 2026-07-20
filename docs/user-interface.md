@@ -11,6 +11,8 @@ Scope: CLI-first interface for KAT v0.1
 - No hidden pass/fail overrides.
 - Compact console output; details live in artifacts.
 - Raw logs are preserved as source evidence and may contain unredacted values.
+- Redaction covers surfaced command metadata and extracted failure/warning content, including argv, identifiers, lanes, source paths, test names, and stack entries.
+- Artifact-reference fields remain literal and usable. Do not put secrets in run IDs, command IDs, output directories, or other path components.
 
 ## Primary commands
 
@@ -162,6 +164,7 @@ kkachi-agent-tester rules propose --lane unit --parser vitest --raw-log internal
 - Without `--run-id` or `--output-dir`, summarize copies the input raw log into a newly allocated `.kat/runs/<UTC-timestamp>[-NNN]/` directory and writes derived artifacts there. `--output-dir` uses the same collision-free allocation under `<output-dir>/runs/`; `--run-id` retains the fixed Kkachi-compatible layout. The original input remains unchanged.
 - Each summarize operation stores a complete raw-log copy in its artifact directory, so repeated summarization increases local storage usage in proportion to the source log size.
 - Summary JSON stores excerpt references relative to the summary directory, such as `excerpts/F001.log`. An absolute `--summary` input remains valid, while absolute, traversal, cross-run, dangling, and symlink-escaping embedded references fail with artifact exit code `3`.
+- Inferred `command_id` and `lane` values are redacted in summary, status, and console metadata. The copied raw-log and derived artifact references retain their literal filenames so they remain resolvable.
 
 ## Exit code guidance
 
