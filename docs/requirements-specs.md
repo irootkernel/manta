@@ -94,7 +94,7 @@ Implementation note: the original v0.1 roadmap is implemented. Repository review
 
 ## RQHAR: Post-baseline hardening and contract closure
 
-- [ ] `KAT-REQ-RQHAR-001` Validate every artifact-bearing identifier and reference, reject path syntax in identifiers, and fail closed when a resolved path or symlink would escape its allowed artifact boundary.
+- [x] `KAT-REQ-RQHAR-001` Validate every artifact-bearing identifier and reference, reject path syntax in identifiers, and fail closed when a resolved path or symlink would escape its allowed artifact boundary.
 - [ ] `KAT-REQ-RQHAR-002` Plan and open raw-log artifacts before command execution, handle operator interruption signals explicitly, forward termination to the child process, and preserve bounded partial raw/status evidence with an explicit non-pass state.
 - [ ] `KAT-REQ-RQHAR-003` Allocate collision-free standalone run directories so repeated executions in the same timestamp interval never overwrite earlier raw, summary, status, or excerpt artifacts.
 - [ ] `KAT-REQ-RQHAR-004` Apply configured redaction consistently to all surfaced summary, status, excerpt, and console-safe text and metadata while preserving original raw logs unchanged.

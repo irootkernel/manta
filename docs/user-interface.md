@@ -61,6 +61,8 @@ Recommended global options:
 | `--no-color` | Disable ANSI colors. |
 | `--verbose` | Print additional local diagnostics without dumping raw logs. |
 
+Run IDs, configured command IDs, and rule IDs must match `[A-Za-z0-9][A-Za-z0-9_-]*`. Invalid identifiers fail with config exit code `2`; run identifiers are checked before the test command starts.
+
 ## Tested setup fixture
 
 The examples below are grounded in the current automated tests. They use this minimal fixture:
@@ -157,6 +159,7 @@ kkachi-agent-tester rules propose --lane unit --parser vitest --raw-log internal
 - When only a raw log is available, KAT infers `command_id` and `lane` from the raw-log basename. For example, `unit.raw.log` produces `command_id: unit` and `lane: unit`.
 - Because original execution metadata is unavailable, summarize infers `status` and `exit_code` from raw-log evidence. Use `run` when authoritative execution metadata is required.
 - Without `--run-id` or `--output-dir`, summarize writes summary/status/excerpt artifacts beside the input raw log. With either option, summarize copies the raw log into the planned artifact layout before writing derived artifacts.
+- Summary JSON stores excerpt references relative to the summary directory, such as `excerpts/F001.log`. An absolute `--summary` input remains valid, while absolute, traversal, cross-run, dangling, and symlink-escaping embedded references fail with artifact exit code `3`.
 
 ## Exit code guidance
 
@@ -188,7 +191,7 @@ Raw log SHA-256: sha256:...
 
 - File: src/foo.test.ts:42
 - Test: renders empty state
-- Excerpt: fixtures/excerpts/F001.log
+- Excerpt: excerpts/F001.log
 
 ## Notes
 

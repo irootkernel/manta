@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
 )
 
@@ -165,6 +167,163 @@ func TestCreateSearchAndDeleteRule(t *testing.T) {
 	}
 	if disabled.Status != model.RuleStatusDisabled || disabled.DeletionReason != "superseded by v2" {
 		t.Fatalf("expected disabled rule with deletion reason, got %+v", disabled)
+	}
+}
+
+func TestCreateRejectsUnsafeRuleIDs(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"../generic", "/tmp/generic", "nested/generic", ".", "규칙"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			repo := t.TempDir()
+			if _, err := Create(repo, validRule(id)); err == nil {
+				t.Fatalf("expected unsafe rule id %q to fail", id)
+			}
+		})
+	}
+}
+
+func TestLoadAllRejectsRuleSymlinkEscape(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	rulesDir := RulesDir(repo)
+	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	external := filepath.Join(t.TempDir(), "external.yaml")
+	data, err := yaml.Marshal(validRule("external"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(external, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(external, filepath.Join(rulesDir, "external.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadAll(repo); err == nil {
+		t.Fatal("expected external rule symlink to fail closed")
+	}
+}
+
+func TestLoadAllRejectsDanglingRuleSymlink(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	rulesDir := RulesDir(repo)
+	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(repo, "missing.yaml"), filepath.Join(rulesDir, "dangling.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadAll(repo); err == nil {
+		t.Fatal("expected dangling rule symlink to fail closed")
+	}
+}
+
+func TestLoadAllAllowsInternalRuleSymlink(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	rulesDir := RulesDir(repo)
+	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := yaml.Marshal(validRule("internal"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(repo, "internal-rule.yaml")
+	if err := os.WriteFile(target, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(rulesDir, "internal.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadAll(repo)
+	if err != nil {
+		t.Fatalf("expected internal rule symlink to be allowed: %v", err)
+	}
+	if len(loaded) != 1 || loaded[0].ID != "internal" {
+		t.Fatalf("unexpected rules %+v", loaded)
+	}
+}
+
+func TestCreateRuleSymlinkContainment(t *testing.T) {
+	t.Parallel()
+	t.Run("external rejected", func(t *testing.T) {
+		t.Parallel()
+		repo := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(repo, ".kkachi", "tester"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		external := t.TempDir()
+		if err := os.Symlink(external, RulesDir(repo)); err != nil {
+			t.Fatal(err)
+		}
+		_, err := Create(repo, validRule("external-write"))
+		if model.ExitCodeFor(err) != int(model.ExitCodeArtifactError) {
+			t.Fatalf("expected artifact error, got %v", err)
+		}
+		entries, err := os.ReadDir(external)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 0 {
+			t.Fatalf("expected no external rule writes, got %d entries", len(entries))
+		}
+	})
+
+	t.Run("internal allowed", func(t *testing.T) {
+		t.Parallel()
+		repo := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(repo, ".kkachi", "tester"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		internal := filepath.Join(repo, "actual-rules")
+		if err := os.MkdirAll(internal, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(internal, RulesDir(repo)); err != nil {
+			t.Fatal(err)
+		}
+		created, err := Create(repo, validRule("internal-write"))
+		if err != nil {
+			t.Fatalf("expected internal symlink write to succeed: %v", err)
+		}
+		if created.ID != "internal-write" {
+			t.Fatalf("unexpected created rule %+v", created)
+		}
+		if _, err := os.Stat(filepath.Join(internal, "internal-write.yaml")); err != nil {
+			t.Fatalf("expected rule in internal target: %v", err)
+		}
+	})
+}
+
+func TestProposeRejectsSymlinkEscape(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".kat"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	external := t.TempDir()
+	if err := os.Symlink(external, ProposedRulesDir(repo)); err != nil {
+		t.Fatal(err)
+	}
+	rawPath := filepath.Join(repo, "fixture.raw.log")
+	rawText := "noise\nTypeError: boom\nsrc/foo.ts:99:7\n✗ renders empty state\n"
+	if err := os.WriteFile(rawPath, []byte(rawText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Propose(repo, "unit", "generic", rawPath, 2, 4)
+	if model.ExitCodeFor(err) != int(model.ExitCodeArtifactError) {
+		t.Fatalf("expected artifact error, got %v", err)
+	}
+	entries, err := os.ReadDir(external)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected no external proposal writes, got %d entries", len(entries))
 	}
 }
 

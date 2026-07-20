@@ -47,3 +47,26 @@ func TestValidateRejectsUnknownParser(t *testing.T) {
 		t.Fatal("expected unknown parser to fail validation")
 	}
 }
+
+func TestValidateRejectsUnsafeCommandIDs(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"../unit", "/tmp/unit", "nested/unit", ".", "유닛"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			cfg := model.Config{
+				Version: 1,
+				Commands: map[string]model.CommandConfig{
+					id: {
+						Command:    []string{"true"},
+						Lane:       "unit",
+						Parser:     "generic",
+						TimeoutSec: 60,
+					},
+				},
+			}
+			if err := Validate(cfg); err == nil {
+				t.Fatalf("expected unsafe command id %q to fail", id)
+			}
+		})
+	}
+}

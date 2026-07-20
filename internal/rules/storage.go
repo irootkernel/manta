@@ -15,6 +15,7 @@ import (
 
 	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/extract"
 	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
 )
 
 func RulesDir(repoRoot string) string {
@@ -33,7 +34,7 @@ func LoadAll(repoRoot string) ([]model.Rule, error) {
 	rules := make([]model.Rule, 0, len(paths))
 	ids := map[string]string{}
 	for _, path := range paths {
-		rule, err := readRuleFile(path)
+		rule, err := readRuleFile(repoRoot, path)
 		if err != nil {
 			return nil, err
 		}
@@ -51,6 +52,9 @@ func LoadAll(repoRoot string) ([]model.Rule, error) {
 }
 
 func LoadByID(repoRoot, id string) (model.Rule, error) {
+	if err := safety.ValidateArtifactIdentifier("rule id", id); err != nil {
+		return model.Rule{}, model.NewKATError(model.ExitCodeConfigError, "load rule", err)
+	}
 	rules, err := LoadAll(repoRoot)
 	if err != nil {
 		return model.Rule{}, err
@@ -98,7 +102,7 @@ func Create(repoRoot string, rule model.Rule) (model.Rule, error) {
 		return model.Rule{}, err
 	}
 	path := filepath.Join(RulesDir(repoRoot), rule.ID+".yaml")
-	return writeRuleFile(path, rule)
+	return writeRuleFile(repoRoot, path, rule)
 }
 
 func Update(repoRoot, id string, rule model.Rule) (model.Rule, error) {
@@ -113,7 +117,7 @@ func Update(repoRoot, id string, rule model.Rule) (model.Rule, error) {
 	if path == "" {
 		path = filepath.Join(RulesDir(repoRoot), id+".yaml")
 	}
-	return writeRuleFile(path, rule)
+	return writeRuleFile(repoRoot, path, rule)
 }
 
 func Delete(repoRoot, id, reason string) (model.Rule, error) {
@@ -127,7 +131,7 @@ func Delete(repoRoot, id, reason string) (model.Rule, error) {
 	}
 	rule.Status = model.RuleStatusDisabled
 	rule.DeletionReason = reason
-	return writeRuleFile(rule.SourcePath, rule)
+	return writeRuleFile(repoRoot, rule.SourcePath, rule)
 }
 
 func TestRule(repoRoot, id, rawLogPath string, expectStart, expectEnd int) (model.RuleTestResult, error) {
@@ -234,7 +238,7 @@ func Propose(repoRoot, lane, parser, rawLogPath string, startLine, endLine int) 
 	if err := ValidateStoredRule(rule); err != nil {
 		return model.RuleProposal{}, err
 	}
-	if err := os.MkdirAll(ProposedRulesDir(repoRoot), 0o755); err != nil {
+	if err := safety.MkdirAllWithin(repoRoot, ProposedRulesDir(repoRoot), 0o755); err != nil {
 		return model.RuleProposal{}, model.NewKATError(model.ExitCodeArtifactError, "create proposal directory", err)
 	}
 	path := filepath.Join(ProposedRulesDir(repoRoot), fmt.Sprintf("%s-%s.yaml", proposalID, time.Now().UTC().Format("20060102t150405")))
@@ -242,7 +246,7 @@ func Propose(repoRoot, lane, parser, rawLogPath string, startLine, endLine int) 
 	if err != nil {
 		return model.RuleProposal{}, model.NewKATError(model.ExitCodeArtifactError, "marshal proposal rule", err)
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := safety.WriteFileWithin(repoRoot, path, data, 0o644); err != nil {
 		return model.RuleProposal{}, model.NewKATError(model.ExitCodeArtifactError, "write proposal rule", err)
 	}
 	return model.RuleProposal{Rule: rule, Path: path}, nil
@@ -264,8 +268,8 @@ func ValidateStoredRule(rule model.Rule) error {
 	return nil
 }
 
-func readRuleFile(path string) (model.Rule, error) {
-	data, err := os.ReadFile(path)
+func readRuleFile(repoRoot, path string) (model.Rule, error) {
+	data, err := safety.ReadFileWithin(repoRoot, path)
 	if err != nil {
 		return model.Rule{}, model.NewKATError(model.ExitCodeConfigError, "read rule file", err)
 	}
@@ -277,18 +281,18 @@ func readRuleFile(path string) (model.Rule, error) {
 	return rule, nil
 }
 
-func writeRuleFile(path string, rule model.Rule) (model.Rule, error) {
+func writeRuleFile(repoRoot, path string, rule model.Rule) (model.Rule, error) {
 	if err := ValidateStoredRule(rule); err != nil {
 		return model.Rule{}, err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := safety.MkdirAllWithin(repoRoot, filepath.Dir(path), 0o755); err != nil {
 		return model.Rule{}, model.NewKATError(model.ExitCodeArtifactError, "create rule directory", err)
 	}
 	data, err := yaml.Marshal(&rule)
 	if err != nil {
 		return model.Rule{}, model.NewKATError(model.ExitCodeArtifactError, "marshal rule file", err)
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := safety.WriteFileWithin(repoRoot, path, data, 0o644); err != nil {
 		return model.Rule{}, model.NewKATError(model.ExitCodeArtifactError, "write rule file", err)
 	}
 	rule.SourcePath = path
@@ -296,11 +300,11 @@ func writeRuleFile(path string, rule model.Rule) (model.Rule, error) {
 }
 
 func ensureRuleIDAvailable(repoRoot, id string) error {
-	if strings.TrimSpace(id) == "" {
-		return model.NewKATError(model.ExitCodeConfigError, "create rule", fmt.Errorf("rule id must not be empty"))
+	if err := safety.ValidateArtifactIdentifier("rule id", id); err != nil {
+		return model.NewKATError(model.ExitCodeConfigError, "create rule", err)
 	}
 	path := filepath.Join(RulesDir(repoRoot), id+".yaml")
-	if _, err := os.Stat(path); err == nil {
+	if _, err := safety.StatWithin(repoRoot, path); err == nil {
 		return model.NewKATError(model.ExitCodeConfigError, "create rule", fmt.Errorf("rule id %q already exists", id))
 	} else if err != nil && !os.IsNotExist(err) {
 		return model.NewKATError(model.ExitCodeConfigError, "create rule", err)

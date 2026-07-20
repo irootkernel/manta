@@ -1,7 +1,9 @@
 package rules
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -19,10 +21,19 @@ var knownRuleParsers = map[string]bool{
 }
 
 func Discover(repoRoot string) ([]string, error) {
-	glob := filepath.Join(repoRoot, ".kkachi", "tester", "rules", "*.yaml")
-	matches, err := filepath.Glob(glob)
+	rulesDir := RulesDir(repoRoot)
+	entries, err := safety.ReadDirWithin(repoRoot, rulesDir)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
 		return nil, model.NewKATError(model.ExitCodeConfigError, "discover rule files", err)
+	}
+	matches := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".yaml" {
+			matches = append(matches, filepath.Join(rulesDir, entry.Name()))
+		}
 	}
 	return matches, nil
 }
@@ -56,8 +67,8 @@ func isApplicable(rule model.Rule, lane, parser string) bool {
 }
 
 func ValidateApplicable(rule model.Rule) error {
-	if strings.TrimSpace(rule.ID) == "" {
-		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule id must not be empty (%s)", rule.SourcePath))
+	if err := safety.ValidateArtifactIdentifier("rule id", rule.ID); err != nil {
+		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("%w (%s)", err, rule.SourcePath))
 	}
 	if rule.Status != model.RuleStatusActive && rule.Status != model.RuleStatusDisabled {
 		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q has invalid status %q", rule.ID, rule.Status))

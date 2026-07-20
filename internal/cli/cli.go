@@ -246,17 +246,20 @@ func executeRun(req model.RunRequest) (runResult, int, error) {
 	if err != nil {
 		return runResult{}, 0, err
 	}
+	paths, err := artifacts.PlanPaths(req.RepoRoot, req.OutputDir, req.RunID, commandID)
+	if err != nil {
+		return runResult{}, 0, err
+	}
 
 	runOutput, err := runner.Execute(context.Background(), req.RepoRoot, commandID, lane, parser, argv, timeoutSec)
 	if err != nil {
 		return runResult{}, 0, err
 	}
 
-	paths := artifacts.PlanPaths(req.RepoRoot, req.OutputDir, req.RunID, commandID)
 	if err := artifacts.EnsureParents(paths); err != nil {
 		return runResult{}, 0, err
 	}
-	rawSHA, err := artifacts.WriteRawLog(paths.RawLogPath, runOutput.RawLogBytes)
+	rawSHA, err := artifacts.WriteRawLog(paths, runOutput.RawLogBytes)
 	if err != nil {
 		return runResult{}, 0, err
 	}
@@ -345,17 +348,17 @@ func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.Ar
 		Failures:        append([]model.Failure(nil), runOutput.Failures...),
 		Warnings:        append([]model.Warning(nil), runOutput.Warnings...),
 	}
-	if err := writeExcerpts(req, cfg, paths, runOutput.RawLogBytes, &summary); err != nil {
+	if err := writeExcerpts(cfg, paths, runOutput.RawLogBytes, &summary); err != nil {
 		return runResult{}, model.RunOutput{}, err
 	}
 	if err := redactSummary(&summary, cfg); err != nil {
 		return runResult{}, model.RunOutput{}, err
 	}
-	summarySHA, err := artifacts.WriteSummaryJSON(paths.SummaryJSON, summary)
+	summarySHA, err := artifacts.WriteSummaryJSON(paths, summary)
 	if err != nil {
 		return runResult{}, model.RunOutput{}, err
 	}
-	if err := artifacts.WriteSummaryMarkdown(paths.SummaryMD, summary); err != nil {
+	if err := artifacts.WriteSummaryMarkdown(paths, summary); err != nil {
 		return runResult{}, model.RunOutput{}, err
 	}
 	statusDoc := model.Status{
@@ -373,7 +376,7 @@ func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.Ar
 		UpdatedAt:         time.Now().UTC(),
 	}
 	statusDoc.StatusHash = artifacts.ComputeStatusHash(statusDoc)
-	if err := artifacts.WriteStatusJSON(paths.StatusJSON, statusDoc); err != nil {
+	if err := artifacts.WriteStatusJSON(paths, statusDoc); err != nil {
 		return runResult{}, model.RunOutput{}, err
 	}
 
@@ -393,11 +396,14 @@ func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.Ar
 
 func planSummarizeArtifacts(req model.RunRequest, rawLogPath string, raw []byte, commandID string) (model.ArtifactPaths, string, string, error) {
 	if req.RunID != "" || req.OutputDir != "" {
-		paths := artifacts.PlanPaths(req.RepoRoot, req.OutputDir, req.RunID, commandID)
+		paths, err := artifacts.PlanPaths(req.RepoRoot, req.OutputDir, req.RunID, commandID)
+		if err != nil {
+			return model.ArtifactPaths{}, "", "", err
+		}
 		if err := artifacts.EnsureParents(paths); err != nil {
 			return model.ArtifactPaths{}, "", "", err
 		}
-		rawSHA, err := artifacts.WriteRawLog(paths.RawLogPath, raw)
+		rawSHA, err := artifacts.WriteRawLog(paths, raw)
 		if err != nil {
 			return model.ArtifactPaths{}, "", "", err
 		}
@@ -413,6 +419,7 @@ func planSummarizeArtifacts(req model.RunRequest, rawLogPath string, raw []byte,
 func siblingArtifactPaths(rawLogPath, commandID string) model.ArtifactPaths {
 	baseDir := filepath.Dir(rawLogPath)
 	return model.ArtifactPaths{
+		BoundaryDir: baseDir,
 		BaseDir:     baseDir,
 		RawLogPath:  rawLogPath,
 		SummaryJSON: filepath.Join(baseDir, commandID+".summary.json"),
@@ -432,7 +439,7 @@ func inferSummarizeStatus(raw []byte) (model.RunStatus, int) {
 	return model.RunStatusPassed, 0
 }
 
-func writeExcerpts(req model.RunRequest, cfg model.Config, paths model.ArtifactPaths, raw []byte, summary *model.Summary) error {
+func writeExcerpts(cfg model.Config, paths model.ArtifactPaths, raw []byte, summary *model.Summary) error {
 	text := string(raw)
 	for i := range summary.Failures {
 		failure := &summary.Failures[i]
@@ -443,11 +450,14 @@ func writeExcerpts(req model.RunRequest, cfg model.Config, paths model.ArtifactP
 		}
 		redacted = safety.FilterNoise(redacted, cfg.NoiseFilters)
 		redacted = safety.BoundBytes(redacted, safety.MaxExcerptBytes)
+		if err := safety.ValidateArtifactIdentifier("failure id", failure.ID); err != nil {
+			return model.NewKATError(model.ExitCodeArtifactError, "write excerpt", err)
+		}
 		excerptPath := filepath.Join(paths.ExcerptsDir, failure.ID+".log")
-		if err := artifacts.WriteExcerpt(excerptPath, redacted); err != nil {
+		if err := artifacts.WriteExcerpt(paths, excerptPath, redacted); err != nil {
 			return err
 		}
-		failure.Excerpt = artifacts.Rel(req.RepoRoot, excerptPath)
+		failure.Excerpt = filepath.ToSlash(filepath.Join("excerpts", failure.ID+".log"))
 	}
 	return nil
 }
@@ -575,7 +585,12 @@ func excerptCommand(opts globalOptions, args []string, stdout, stderr io.Writer)
 	if !filepath.IsAbs(resolved) {
 		resolved = filepath.Join(opts.RepoRoot, summaryPath)
 	}
-	data, err := os.ReadFile(resolved)
+	canonicalSummary, err := filepath.EvalSymlinks(resolved)
+	if err != nil {
+		writeLine(stderr, err)
+		return int(model.ExitCodeConfigError)
+	}
+	data, err := os.ReadFile(canonicalSummary)
 	if err != nil {
 		writeLine(stderr, err)
 		return int(model.ExitCodeConfigError)
@@ -590,17 +605,25 @@ func excerptCommand(opts globalOptions, args []string, stdout, stderr io.Writer)
 		if failure.ID != failureID {
 			continue
 		}
-		excerptPath := failure.Excerpt
-		if !filepath.IsAbs(excerptPath) {
-			excerptPath = filepath.Join(opts.RepoRoot, filepath.FromSlash(excerptPath))
+		reference := failure.Excerpt
+		if !isSafeExcerptReference(reference) {
+			writef(stderr, "unsafe excerpt reference %q\n", reference)
+			return int(model.ExitCodeArtifactError)
 		}
-		content, err := os.ReadFile(excerptPath)
+		summaryDir := filepath.Dir(canonicalSummary)
+		excerptsDir := filepath.Join(summaryDir, "excerpts")
+		if err := safety.ValidateExistingPathWithin(summaryDir, excerptsDir); err != nil {
+			writeLine(stderr, err)
+			return int(model.ExitCodeArtifactError)
+		}
+		excerptPath := filepath.Join(summaryDir, filepath.FromSlash(reference))
+		content, err := safety.ReadFileWithin(excerptsDir, excerptPath)
 		if err != nil {
 			writeLine(stderr, err)
 			return int(model.ExitCodeArtifactError)
 		}
 		if opts.JSON {
-			payload := map[string]any{"failure_id": failureID, "excerpt_path": failure.Excerpt, "content": string(content)}
+			payload := map[string]any{"failure_id": failureID, "excerpt_path": reference, "content": string(content)}
 			encoded, _ := json.Marshal(payload)
 			writeLine(stdout, string(encoded))
 		} else {
@@ -610,6 +633,14 @@ func excerptCommand(opts globalOptions, args []string, stdout, stderr io.Writer)
 	}
 	writef(stderr, "failure id %q not found in summary\n", failureID)
 	return int(model.ExitCodeConfigError)
+}
+
+func isSafeExcerptReference(reference string) bool {
+	native := filepath.FromSlash(reference)
+	return reference != "" &&
+		!filepath.IsAbs(native) &&
+		filepath.ToSlash(filepath.Clean(native)) == reference &&
+		strings.HasPrefix(reference, "excerpts/")
 }
 
 func writeVersion(w io.Writer, info BuildInfo, jsonMode bool) {

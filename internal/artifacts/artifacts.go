@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -14,61 +13,62 @@ import (
 	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
 )
 
-func PlanPaths(repoRoot, outputDir, runID, commandID string) model.ArtifactPaths {
+func PlanPaths(repoRoot, outputDir, runID, commandID string) (model.ArtifactPaths, error) {
+	if runID != "" {
+		if err := safety.ValidateArtifactIdentifier("run id", runID); err != nil {
+			return model.ArtifactPaths{}, model.NewKATError(model.ExitCodeConfigError, "plan artifact paths", err)
+		}
+	}
+	if err := safety.ValidateArtifactIdentifier("command id", commandID); err != nil {
+		return model.ArtifactPaths{}, model.NewKATError(model.ExitCodeConfigError, "plan artifact paths", err)
+	}
+
 	stamp := runID
 	if stamp == "" {
 		stamp = time.Now().UTC().Format("20060102T150405")
 	}
 
+	boundaryDir := repoRoot
 	var baseDir string
 	if runID != "" {
 		baseDir = filepath.Join(repoRoot, ".kkachi", "runs", runID, "artifacts", "test")
 	} else if outputDir != "" {
 		if filepath.IsAbs(outputDir) {
-			baseDir = filepath.Join(outputDir, "runs", stamp)
+			boundaryDir = outputDir
 		} else {
-			baseDir = filepath.Join(repoRoot, outputDir, "runs", stamp)
+			boundaryDir = filepath.Join(repoRoot, outputDir)
 		}
+		baseDir = filepath.Join(boundaryDir, "runs", stamp)
 	} else {
 		baseDir = filepath.Join(repoRoot, ".kat", "runs", stamp)
 	}
 
-	raw := filepath.Join(baseDir, commandID+".raw.log")
-	summaryJSON := filepath.Join(baseDir, commandID+".summary.json")
-	summaryMD := filepath.Join(baseDir, commandID+".summary.md")
-	statusJSON := filepath.Join(baseDir, commandID+".status.json")
-	excerptsDir := filepath.Join(baseDir, "excerpts")
-	if runID != "" {
-		excerptsDir = filepath.Join(baseDir, "excerpts")
-	}
-
 	return model.ArtifactPaths{
+		BoundaryDir: boundaryDir,
 		BaseDir:     baseDir,
-		RawLogPath:  raw,
-		SummaryJSON: summaryJSON,
-		SummaryMD:   summaryMD,
-		StatusJSON:  statusJSON,
-		ExcerptsDir: excerptsDir,
-	}
+		RawLogPath:  filepath.Join(baseDir, commandID+".raw.log"),
+		SummaryJSON: filepath.Join(baseDir, commandID+".summary.json"),
+		SummaryMD:   filepath.Join(baseDir, commandID+".summary.md"),
+		StatusJSON:  filepath.Join(baseDir, commandID+".status.json"),
+		ExcerptsDir: filepath.Join(baseDir, "excerpts"),
+	}, nil
 }
 
 func EnsureParents(paths model.ArtifactPaths) error {
-	for _, path := range []string{paths.RawLogPath, paths.SummaryJSON, paths.SummaryMD, paths.StatusJSON, filepath.Join(paths.ExcerptsDir, ".keep")} {
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			return model.NewKATError(model.ExitCodeArtifactError, "create artifact directory", err)
-		}
+	if err := safety.MkdirAllWithin(paths.BoundaryDir, paths.ExcerptsDir, 0o755); err != nil {
+		return model.NewKATError(model.ExitCodeArtifactError, "create artifact directory", err)
 	}
 	return nil
 }
 
-func WriteRawLog(path string, raw []byte) (string, error) {
-	if err := os.WriteFile(path, raw, 0o644); err != nil {
-		return "", model.NewKATError(model.ExitCodeArtifactError, "write raw log", err)
+func WriteRawLog(paths model.ArtifactPaths, raw []byte) (string, error) {
+	if err := writeArtifact(paths, paths.RawLogPath, raw, "write raw log"); err != nil {
+		return "", err
 	}
 	return SHA256(raw), nil
 }
 
-func WriteSummaryJSON(path string, summary model.Summary) (string, error) {
+func WriteSummaryJSON(paths model.ArtifactPaths, summary model.Summary) (string, error) {
 	data, err := json.MarshalIndent(summary, "", "  ")
 	if err != nil {
 		return "", model.NewKATError(model.ExitCodeArtifactError, "marshal summary json", err)
@@ -77,24 +77,21 @@ func WriteSummaryJSON(path string, summary model.Summary) (string, error) {
 		return "", model.NewKATError(model.ExitCodeArtifactError, "write summary json", fmt.Errorf("summary json exceeds %d bytes", safety.MaxSummaryBytes))
 	}
 	written := append(data, '\n')
-	if err := os.WriteFile(path, written, 0o644); err != nil {
-		return "", model.NewKATError(model.ExitCodeArtifactError, "write summary json", err)
+	if err := writeArtifact(paths, paths.SummaryJSON, written, "write summary json"); err != nil {
+		return "", err
 	}
 	return SHA256(written), nil
 }
 
-func WriteStatusJSON(path string, status model.Status) error {
+func WriteStatusJSON(paths model.ArtifactPaths, status model.Status) error {
 	data, err := json.MarshalIndent(status, "", "  ")
 	if err != nil {
 		return model.NewKATError(model.ExitCodeArtifactError, "marshal status json", err)
 	}
-	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
-		return model.NewKATError(model.ExitCodeArtifactError, "write status json", err)
-	}
-	return nil
+	return writeArtifact(paths, paths.StatusJSON, append(data, '\n'), "write status json")
 }
 
-func WriteSummaryMarkdown(path string, summary model.Summary) error {
+func WriteSummaryMarkdown(paths model.ArtifactPaths, summary model.Summary) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# KAT Summary: %s\n\n", summary.CommandID)
 	fmt.Fprintf(&b, "Status: %s\n", summary.Status)
@@ -132,15 +129,16 @@ func WriteSummaryMarkdown(path string, summary model.Summary) error {
 	if len(markdown) > safety.MaxSummaryBytes {
 		return model.NewKATError(model.ExitCodeArtifactError, "write summary markdown", fmt.Errorf("summary markdown exceeds %d bytes", safety.MaxSummaryBytes))
 	}
-	if err := os.WriteFile(path, []byte(markdown), 0o644); err != nil {
-		return model.NewKATError(model.ExitCodeArtifactError, "write summary markdown", err)
-	}
-	return nil
+	return writeArtifact(paths, paths.SummaryMD, []byte(markdown), "write summary markdown")
 }
 
-func WriteExcerpt(path string, content string) error {
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		return model.NewKATError(model.ExitCodeArtifactError, "write excerpt", err)
+func WriteExcerpt(paths model.ArtifactPaths, path string, content string) error {
+	return writeArtifact(paths, path, []byte(content), "write excerpt")
+}
+
+func writeArtifact(paths model.ArtifactPaths, path string, data []byte, operation string) error {
+	if err := safety.WriteFileWithin(paths.BoundaryDir, path, data, 0o644); err != nil {
+		return model.NewKATError(model.ExitCodeArtifactError, operation, err)
 	}
 	return nil
 }

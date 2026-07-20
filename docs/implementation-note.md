@@ -1,6 +1,6 @@
 # KAT Implementation Note
 
-Status: v0.1 baseline complete; HARDE follow-up planned
+Status: v0.1 baseline complete; HARDE hardening in progress (`HARDE-001` complete)
 Scope: Guidance for implementing complex KAT v0.1 and post-baseline hardening areas without KAS/KAH dependency
 
 ## Implementation posture
@@ -27,7 +27,7 @@ internal/extract/
 internal/rules/
   rule model, YAML load/save, CRUD, validation, test/propose
 internal/safety/
-  redaction, noise filtering, bounded regex helpers, size limits
+  identifier validation, rooted path containment, redaction, noise filtering, regex/size bounds
 ```
 
 ## Runner guidance
@@ -47,7 +47,9 @@ internal/safety/
 - Write raw logs first, then summary JSON, summary Markdown, excerpts, and status JSON.
 - Include SHA-256 for raw logs and summary JSON.
 - Use relative paths in JSON where practical so artifacts remain movable within a repository.
-- Treat excerpt IDs like `F001` as summary-local. Deterministic excerpt lookup is via summary path plus failure ID.
+- Validate run IDs, configured command IDs, rule IDs, and generated failure IDs with `[A-Za-z0-9][A-Za-z0-9_-]*` before using them in artifact paths.
+- Resolve every artifact read, write, directory creation, stat, and discovery operation against its allowed boundary; reject traversal, dangling links, and symlinks that resolve outside that boundary.
+- Treat excerpt IDs like `F001` as summary-local. Store excerpt references as summary-directory-relative paths such as `excerpts/F001.log`, and resolve them through the summary path plus failure ID.
 - If any required artifact cannot be written, report an internal error and do not claim success.
 
 ## Extraction guidance
@@ -152,9 +154,9 @@ Apply in this order for surfaced artifacts:
 
 Raw-log policy is fixed: raw logs remain original local evidence and are not redacted by default. Docs and CLI output should warn that raw logs may contain unredacted values.
 
-## Testing guidance for the future implementation
+## Testing guidance
 
-Test fixtures should cover:
+Tests should cover:
 
 - Passing command.
 - Failing command with obvious error span.
@@ -164,7 +166,10 @@ Test fixtures should cover:
 - Noise filtering in summary while raw log remains unchanged.
 - Rule test with expected span.
 - Rule overmatch rejection.
-- Artifact path generation for `.kat/` and `.kkachi/runs/<run_id>/...`.
+- Artifact path generation for `.kat/`, caller-selected `--output-dir`, and `.kkachi/runs/<run_id>/...` layouts.
+- Invalid run, command, rule, and failure IDs failing before command execution or artifact writes.
+- Traversal, cross-run excerpt access, dangling links, and external symlink escape failing closed across artifact and rule operations.
+- Internal symlinks whose canonical targets remain inside the applicable boundary continuing to work.
 - Specialized parser fixtures for `vitest`, `pytest`, `go-test`, and `playwright`.
 
 ## Release-readiness checklist
@@ -178,7 +183,7 @@ Before tagging `v0.1.3`, verify all of the following:
 - summarize smoke test from an existing raw log
 - parser fixture coverage for `generic`, `vitest`, `pytest`, `go-test`, and `playwright`
 - rule lifecycle coverage for `list/search/show/create/update/delete/test/propose`
-- artifact path verification for both `.kat/` and `.kkachi/runs/<run_id>/...`
+- artifact path and containment verification for `.kat/`, `--output-dir`, and `.kkachi/runs/<run_id>/...`
 - watcher status JSON compatibility, including status-hash inputs
 - release notes mention known limitations, especially raw-log redaction policy and rule proposals remaining run-local until promoted
 

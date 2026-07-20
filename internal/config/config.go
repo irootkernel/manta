@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
 )
 
 const DefaultConfigPath = ".kkachi/tester.yaml"
@@ -57,8 +58,8 @@ func Validate(cfg model.Config) error {
 		return model.NewKATError(model.ExitCodeConfigError, "validate config", fmt.Errorf("unsupported config version %d", cfg.Version))
 	}
 	for id, cmd := range cfg.Commands {
-		if strings.TrimSpace(id) == "" {
-			return model.NewKATError(model.ExitCodeConfigError, "validate config", fmt.Errorf("command id must not be empty"))
+		if err := safety.ValidateArtifactIdentifier("command id", id); err != nil {
+			return model.NewKATError(model.ExitCodeConfigError, "validate config", err)
 		}
 		if len(cmd.Command) == 0 {
 			return model.NewKATError(model.ExitCodeConfigError, "validate config", fmt.Errorf("command %q must define argv command", id))

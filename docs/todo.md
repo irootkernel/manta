@@ -1,6 +1,6 @@
 # KAT Todo
 
-Status: Hardening epic planned
+Status: Hardening epic in progress
 Scope: Open documentation and implementation follow-up notes
 
 ## Todo status legend
@@ -10,15 +10,14 @@ Scope: Open documentation and implementation follow-up notes
 - `Blocked`: waiting on a decision or dependency.
 - `Done`: completed and referenced by roadmap or requirements.
 
-## Open items
+## Active items
 
 ### TD-HARDE-001: Complete the post-baseline hardening epic
 
-Status: Open
+Status: Active
 References: `HARDE-001` to `HARDE-007`, `KAT-REQ-RQHAR-001` to `KAT-REQ-RQHAR-007`
 
-Implement the `HARDE` roadmap tasks as separate reviewable PRs in numerical order. Each task must retain its focused evidence and pass the affected existing suites before its roadmap status changes to `Done`. `HARDE-007` remains the final end-to-end gate; passing an earlier focused test does not close the epic.
-
+`HARDE-001` is complete. Continue with `HARDE-002` through `HARDE-007` as separate reviewable PRs in numerical order. Each task must retain its focused evidence and pass the affected existing suites before its roadmap status changes to `Done`. `HARDE-007` remains the final end-to-end gate; passing an earlier focused test does not close the epic.
 
 ## Completed items
 

@@ -102,6 +102,17 @@ Standalone mode may write to:
 ```
 
 Failure IDs such as `F001` are summary-local identifiers. Excerpt lookup is deterministic through summary context, not by assuming failure IDs are globally unique.
+The summary stores each excerpt as a summary-directory-relative reference such as `excerpts/F001.log`. Artifact-bearing identifiers use `[A-Za-z0-9][A-Za-z0-9_-]*`; canonical containment checks reject absolute paths, traversal, cross-run references, dangling links, and symlinks that resolve outside the selected boundary.
+
+The containment boundary depends on the operation:
+
+- Default standalone and `--run-id` artifact writes are contained by the repository root.
+- `--output-dir` artifact writes are contained by the caller-selected output directory, whether that directory is relative or absolute.
+- In-place `summarize` writes are contained by the directory holding the input raw log.
+- Excerpt reads are contained by the canonical `<summary-dir>/excerpts/` directory.
+- Project rules and rule proposals are contained by the repository root.
+
+Absolute `--output-dir` and `--summary` inputs remain valid where documented; the absolute-path rejection applies to artifact-bearing identifiers and embedded excerpt references. Symlinks whose canonical targets remain inside the applicable boundary are allowed, while dangling links and links that resolve outside it fail closed.
 
 ## Config model
 
@@ -165,7 +176,7 @@ failures:
       end_line: 1917
       start_byte: 88211
       end_byte: 92108
-    excerpt: .kat/runs/20260624T010203/excerpts/F001.log
+    excerpt: excerpts/F001.log
     stack_top:
       - src/foo.ts:42
       - src/foo.test.ts:19

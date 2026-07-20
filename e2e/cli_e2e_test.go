@@ -134,6 +134,149 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 	}
 }
 
+func TestBinaryArtifactContainment(t *testing.T) {
+	t.Parallel()
+	root := projectRoot(t)
+	bin := buildBinary(t, root)
+
+	t.Run("unsafe run id fails before execution", func(t *testing.T) {
+		repo := t.TempDir()
+		writeE2EConfig(t, repo, "#!/bin/sh\ntouch command-ran\n")
+		cmd := exec.Command(bin, "--repo", repo, "--run-id", "../escape", "run", "unit")
+		cmd.Dir = repo
+		out, err := cmd.CombinedOutput()
+		requireExitCode(t, err, int(model.ExitCodeConfigError), out)
+		if _, err := os.Stat(filepath.Join(repo, "command-ran")); !os.IsNotExist(err) {
+			t.Fatalf("expected command not to execute, stat error=%v", err)
+		}
+	})
+
+	t.Run("valid run id writes Kkachi layout", func(t *testing.T) {
+		repo := t.TempDir()
+		writeE2EConfig(t, repo, "#!/bin/sh\necho ok\n")
+		cmd := exec.Command(bin, "--repo", repo, "--run-id", "run-001", "run", "unit")
+		cmd.Dir = repo
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("expected successful Kkachi run, err=%v output=%s", err, out)
+		}
+		base := filepath.Join(repo, ".kkachi", "runs", "run-001", "artifacts", "test")
+		for _, name := range []string{"unit.raw.log", "unit.summary.json", "unit.summary.md", "unit.status.json"} {
+			if _, err := os.Stat(filepath.Join(base, name)); err != nil {
+				t.Fatalf("expected %s in Kkachi layout: %v", name, err)
+			}
+		}
+		if info, err := os.Stat(filepath.Join(base, "excerpts")); err != nil || !info.IsDir() {
+			t.Fatalf("expected Kkachi excerpts directory, info=%v err=%v", info, err)
+		}
+	})
+
+	t.Run("Kkachi runs symlink escape is rejected", func(t *testing.T) {
+		repo := t.TempDir()
+		writeE2EConfig(t, repo, "#!/bin/sh\necho ok\n")
+		external := t.TempDir()
+		if err := os.Symlink(external, filepath.Join(repo, ".kkachi", "runs")); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command(bin, "--repo", repo, "--run-id", "run-001", "run", "unit")
+		cmd.Dir = repo
+		out, err := cmd.CombinedOutput()
+		requireExitCode(t, err, int(model.ExitCodeArtifactError), out)
+		entries, err := os.ReadDir(external)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 0 {
+			t.Fatalf("expected no artifacts outside the repository, got %d entries", len(entries))
+		}
+	})
+
+	for _, test := range []struct {
+		name      string
+		reference string
+		symlink   bool
+	}{
+		{name: "traversal excerpt", reference: "excerpts/../../run-b/excerpts/F001.log"},
+		{name: "cross-run excerpt symlink", reference: "excerpts/F001.log", symlink: true},
+	} {
+		t.Run(test.name+" is rejected", func(t *testing.T) {
+			repo := t.TempDir()
+			runA := filepath.Join(repo, ".kkachi", "runs", "run-a", "artifacts", "test")
+			runB := filepath.Join(repo, ".kkachi", "runs", "run-b", "artifacts", "test")
+			if err := os.MkdirAll(filepath.Join(runA, "excerpts"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(filepath.Join(runB, "excerpts"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			target := filepath.Join(runB, "excerpts", "F001.log")
+			if err := os.WriteFile(target, []byte("other-run-secret\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if test.symlink {
+				if err := os.Symlink(target, filepath.Join(runA, "excerpts", "F001.log")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			summaryPath := writeE2ESummary(t, runA, test.reference)
+			cmd := exec.Command(bin, "--repo", repo, "excerpt", "--summary", summaryPath, "F001")
+			cmd.Dir = repo
+			out, err := cmd.CombinedOutput()
+			requireExitCode(t, err, int(model.ExitCodeArtifactError), out)
+			if strings.Contains(string(out), "other-run-secret") {
+				t.Fatalf("cross-run excerpt content leaked: %q", out)
+			}
+		})
+	}
+}
+
+func writeE2EConfig(t *testing.T, repo, script string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(repo, ".kkachi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configText := strings.Join([]string{
+		"version: 1",
+		"commands:",
+		"  unit:",
+		"    command: [\"sh\", \"test.sh\"]",
+		"    lane: unit",
+		"    parser: generic",
+		"    timeout_sec: 10",
+	}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "test.sh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeE2ESummary(t *testing.T, dir, reference string) string {
+	t.Helper()
+	summary := model.Summary{Failures: []model.Failure{{ID: "F001", Excerpt: reference}}}
+	data, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "unit.summary.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func requireExitCode(t *testing.T, err error, expected int, output []byte) {
+	t.Helper()
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("expected exit code %d, err=%v output=%s", expected, err, output)
+	}
+	if exitErr.ExitCode() != expected {
+		t.Fatalf("expected exit code %d, got %d output=%s", expected, exitErr.ExitCode(), output)
+	}
+}
+
 func buildBinary(t *testing.T, root string) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "kkachi-agent-tester")

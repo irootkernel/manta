@@ -71,6 +71,9 @@ func TestConfiguredRunAndExcerpt(t *testing.T) {
 	if len(summary.Failures) != 1 {
 		t.Fatalf("expected one failure, got %d", len(summary.Failures))
 	}
+	if summary.Failures[0].Excerpt != "excerpts/F001.log" {
+		t.Fatalf("expected summary-local excerpt reference, got %q", summary.Failures[0].Excerpt)
+	}
 	if strings.Contains(summary.Failures[0].Signature, "secret") {
 		t.Fatalf("expected redacted failure signature, got %q", summary.Failures[0].Signature)
 	}
@@ -125,6 +128,187 @@ func TestConfiguredRunAndExcerpt(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "token=<redacted>") {
 		t.Fatalf("expected redacted excerpt output, got %q", stdout.String())
+	}
+}
+
+func TestUnsafeRunIDFailsBeforeCommandExecution(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	writeMarkerCommandConfig(t, repo, "unit")
+	var stdout, stderr bytes.Buffer
+	exitCode := Main([]string{"--repo", repo, "--run-id", "../escape", "run", "unit"}, &stdout, &stderr)
+	if exitCode != int(model.ExitCodeConfigError) {
+		t.Fatalf("expected config exit code, got %d stderr=%s", exitCode, stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(repo, "command-ran")); !os.IsNotExist(err) {
+		t.Fatalf("expected command not to execute, stat error=%v", err)
+	}
+}
+
+func TestUnsafeConfiguredCommandIDFailsBeforeExecution(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	writeMarkerCommandConfig(t, repo, "../unit")
+	var stdout, stderr bytes.Buffer
+	exitCode := Main([]string{"--repo", repo, "run", "../unit"}, &stdout, &stderr)
+	if exitCode != int(model.ExitCodeConfigError) {
+		t.Fatalf("expected config exit code, got %d stderr=%s", exitCode, stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(repo, "command-ran")); !os.IsNotExist(err) {
+		t.Fatalf("expected command not to execute, stat error=%v", err)
+	}
+}
+
+func TestExcerptRejectsUnsafeReferences(t *testing.T) {
+	t.Parallel()
+	for name, reference := range map[string]string{
+		"absolute":  "/tmp/F001.log",
+		"traversal": "excerpts/../../other/F001.log",
+		"cross-run": "../run-b/excerpts/F001.log",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			repo := t.TempDir()
+			summaryPath := writeExcerptSummary(t, repo, reference)
+			var stdout, stderr bytes.Buffer
+			exitCode := Main([]string{"--repo", repo, "excerpt", "--summary", summaryPath, "F001"}, &stdout, &stderr)
+			if exitCode != int(model.ExitCodeArtifactError) {
+				t.Fatalf("expected artifact exit code, got %d stderr=%s", exitCode, stderr.String())
+			}
+		})
+	}
+}
+
+func TestExcerptSymlinkContainment(t *testing.T) {
+	t.Parallel()
+	t.Run("cross-run rejected", func(t *testing.T) {
+		t.Parallel()
+		repo := t.TempDir()
+		runA := filepath.Join(repo, ".kkachi", "runs", "run-a", "artifacts", "test")
+		runB := filepath.Join(repo, ".kkachi", "runs", "run-b", "artifacts", "test")
+		if err := os.MkdirAll(filepath.Join(runA, "excerpts"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(runB, "excerpts"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		target := filepath.Join(runB, "excerpts", "F001.log")
+		if err := os.WriteFile(target, []byte("other-run-secret\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, filepath.Join(runA, "excerpts", "F001.log")); err != nil {
+			t.Fatal(err)
+		}
+		summaryPath := writeExcerptSummary(t, runA, "excerpts/F001.log")
+		var stdout, stderr bytes.Buffer
+		exitCode := Main([]string{"--repo", repo, "excerpt", "--summary", summaryPath, "F001"}, &stdout, &stderr)
+		if exitCode != int(model.ExitCodeArtifactError) {
+			t.Fatalf("expected artifact exit code, got %d stderr=%s", exitCode, stderr.String())
+		}
+		if strings.Contains(stdout.String(), "other-run-secret") {
+			t.Fatalf("cross-run excerpt content leaked: %q", stdout.String())
+		}
+	})
+
+	t.Run("dangling rejected", func(t *testing.T) {
+		t.Parallel()
+		repo := t.TempDir()
+		excerptsDir := filepath.Join(repo, "excerpts")
+		if err := os.MkdirAll(excerptsDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(excerptsDir, "missing.log"), filepath.Join(excerptsDir, "F001.log")); err != nil {
+			t.Fatal(err)
+		}
+		summaryPath := writeExcerptSummary(t, repo, "excerpts/F001.log")
+		var stdout, stderr bytes.Buffer
+		exitCode := Main([]string{"--repo", repo, "excerpt", "--summary", summaryPath, "F001"}, &stdout, &stderr)
+		if exitCode != int(model.ExitCodeArtifactError) {
+			t.Fatalf("expected artifact exit code, got %d stderr=%s", exitCode, stderr.String())
+		}
+	})
+
+	t.Run("external rejected", func(t *testing.T) {
+		t.Parallel()
+		repo := t.TempDir()
+		excerptsDir := filepath.Join(repo, "excerpts")
+		if err := os.MkdirAll(excerptsDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		external := filepath.Join(t.TempDir(), "F001.log")
+		if err := os.WriteFile(external, []byte("outside\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(external, filepath.Join(excerptsDir, "F001.log")); err != nil {
+			t.Fatal(err)
+		}
+		summaryPath := writeExcerptSummary(t, repo, "excerpts/F001.log")
+		var stdout, stderr bytes.Buffer
+		exitCode := Main([]string{"--repo", repo, "excerpt", "--summary", summaryPath, "F001"}, &stdout, &stderr)
+		if exitCode != int(model.ExitCodeArtifactError) {
+			t.Fatalf("expected artifact exit code, got %d stderr=%s", exitCode, stderr.String())
+		}
+	})
+
+	t.Run("internal allowed", func(t *testing.T) {
+		t.Parallel()
+		repo := t.TempDir()
+		excerptsDir := filepath.Join(repo, "excerpts")
+		if err := os.MkdirAll(excerptsDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		target := filepath.Join(excerptsDir, "actual.log")
+		if err := os.WriteFile(target, []byte("inside\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, filepath.Join(excerptsDir, "F001.log")); err != nil {
+			t.Fatal(err)
+		}
+		summaryPath := writeExcerptSummary(t, repo, "excerpts/F001.log")
+		var stdout, stderr bytes.Buffer
+		exitCode := Main([]string{"--repo", repo, "excerpt", "--summary", summaryPath, "F001"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("expected success, got %d stderr=%s", exitCode, stderr.String())
+		}
+		if stdout.String() != "inside\n" {
+			t.Fatalf("unexpected excerpt %q", stdout.String())
+		}
+	})
+}
+
+func writeExcerptSummary(t *testing.T, dir, reference string) string {
+	t.Helper()
+	summary := model.Summary{Failures: []model.Failure{{ID: "F001", Excerpt: reference}}}
+	data, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "unit.summary.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func writeMarkerCommandConfig(t *testing.T, repo, commandID string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(repo, ".kkachi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configText := strings.Join([]string{
+		"version: 1",
+		"commands:",
+		"  \"" + commandID + "\":",
+		"    command: [\"sh\", \"touch-marker.sh\"]",
+		"    lane: unit",
+		"    parser: generic",
+		"    timeout_sec: 10",
+	}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "touch-marker.sh"), []byte("#!/bin/sh\ntouch command-ran\n"), 0o755); err != nil {
+		t.Fatal(err)
 	}
 }
 

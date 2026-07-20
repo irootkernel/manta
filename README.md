@@ -67,6 +67,8 @@ Default config path:
 .kkachi/tester.yaml
 ```
 
+Run IDs, configured command IDs, and rule IDs must match `[A-Za-z0-9][A-Za-z0-9_-]*`. KAT rejects path syntax in these identifiers before command execution or artifact writes.
+
 Project-local active rules live under:
 
 ```text
@@ -129,6 +131,8 @@ When `--run-id` is supplied, KAT writes to:
 ```
 
 Summarize mode writes beside the input raw log by default, or into the selected output layout when `--run-id` or `--output-dir` is supplied.
+
+Excerpt references stored in summaries are relative to the summary directory, for example `excerpts/F001.log`. `excerpt --summary` accepts absolute summary paths, but rejects absolute, traversal, cross-run, dangling, or symlink-escaping embedded excerpt references.
 
 ## Documentation
 

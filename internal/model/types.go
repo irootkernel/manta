@@ -197,6 +197,7 @@ type Status struct {
 }
 
 type ArtifactPaths struct {
+	BoundaryDir string
 	BaseDir     string
 	RawLogPath  string
 	SummaryJSON string
