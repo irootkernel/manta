@@ -282,11 +282,11 @@ func executeRun(req model.RunRequest) (runResult, int, error) {
 	rawSHA := artifacts.SHA256(runOutput.RawLogBytes)
 	relRaw := artifacts.Rel(req.RepoRoot, paths.RawLogPath)
 
-	result, processed, err := materializeArtifacts(req, cfg, paths, rawSHA, relRaw, runOutput, applicableRules, materializationExecutedCommand)
+	result, err := materializeArtifacts(req, cfg, paths, rawSHA, relRaw, runOutput, applicableRules, materializationExecutedCommand)
 	if err != nil {
 		return runResult{}, 0, err
 	}
-	return result, exitCodeFromRun(processed), nil
+	return result, exitCodeFromResult(result), nil
 }
 
 func executeSummarize(req model.RunRequest, rawLogArg string) (runResult, int, error) {
@@ -340,7 +340,7 @@ func executeSummarize(req model.RunRequest, rawLogArg string) (runResult, int, e
 		Status:      status,
 		RawLogBytes: raw,
 	}
-	result, _, err := materializeArtifacts(req, cfg, paths, rawSHA, relRaw, runOutput, applicableRules, materializationSummarizedRaw)
+	result, err := materializeArtifacts(req, cfg, paths, rawSHA, relRaw, runOutput, applicableRules, materializationSummarizedRaw)
 	if err != nil {
 		return runResult{}, 0, err
 	}
@@ -350,11 +350,11 @@ func executeSummarize(req model.RunRequest, rawLogArg string) (runResult, int, e
 	return result, 0, nil
 }
 
-func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.ArtifactPaths, rawSHA, relRaw string, runOutput model.RunOutput, applicableRules []model.Rule, source materializationSource) (runResult, model.RunOutput, error) {
+func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.ArtifactPaths, rawSHA, relRaw string, runOutput model.RunOutput, applicableRules []model.Rule, source materializationSource) (runResult, error) {
 	return materializeArtifactsWithExtractor(req, cfg, paths, rawSHA, relRaw, runOutput, applicableRules, source, extract.Process)
 }
 
-func materializeArtifactsWithExtractor(req model.RunRequest, cfg model.Config, paths model.ArtifactPaths, rawSHA, relRaw string, runOutput model.RunOutput, applicableRules []model.Rule, source materializationSource, extractor extractionProcessor) (runResult, model.RunOutput, error) {
+func materializeArtifactsWithExtractor(req model.RunRequest, cfg model.Config, paths model.ArtifactPaths, rawSHA, relRaw string, runOutput model.RunOutput, applicableRules []model.Rule, source materializationSource, extractor extractionProcessor) (runResult, error) {
 	runOutput, extractionErr := extractor(runOutput.RawLogBytes, runOutput, applicableRules)
 	if extractionErr != nil {
 		runOutput.Failures = nil
@@ -370,7 +370,7 @@ func materializeArtifactsWithExtractor(req model.RunRequest, cfg model.Config, p
 	metadata := runOutput.Metadata
 	redactor, err := safety.NewRedactor(cfg.Redaction.Patterns)
 	if err != nil {
-		return runResult{}, model.RunOutput{}, err
+		return runResult{}, err
 	}
 
 	summary := model.Summary{
@@ -386,28 +386,31 @@ func materializeArtifactsWithExtractor(req model.RunRequest, cfg model.Config, p
 		RawLog:          relRaw,
 		RawLogSHA256:    rawSHA,
 		ExtractorStatus: runOutput.ExtractorStatus,
-		FailureCount:    len(runOutput.Failures),
-		WarningCount:    len(runOutput.Warnings),
 		Failures:        cloneFailures(runOutput.Failures),
 		Warnings:        slices.Clone(runOutput.Warnings),
 	}
-	if err := writeExcerpts(redactor, cfg.NoiseFilters, paths, runOutput.RawLogBytes, &summary); err != nil {
-		return runResult{}, model.RunOutput{}, err
-	}
+	assignExcerptReferences(&summary)
 	redactSummary(&summary, redactor, cfg.NoiseFilters)
+	summary, err = artifacts.BoundSummaryEvidence(summary)
+	if err != nil {
+		return runResult{}, err
+	}
+	if err := writeExcerpts(redactor, cfg.NoiseFilters, paths, runOutput.RawLogBytes, summary.Failures); err != nil {
+		return runResult{}, err
+	}
 	summarySHA, err := artifacts.WriteSummaryJSON(paths, summary)
 	if err != nil {
-		return runResult{}, model.RunOutput{}, err
+		return runResult{}, err
 	}
 	if err := artifacts.WriteSummaryMarkdown(paths, summary); err != nil {
-		return runResult{}, model.RunOutput{}, err
+		return runResult{}, err
 	}
 	statusDoc := model.Status{
 		Status:            runOutput.Status,
 		CommandID:         summary.CommandID,
 		Tags:              slices.Clone(summary.Tags),
 		ExitCode:          metadata.ExitCode,
-		ExtractorStatus:   runOutput.ExtractorStatus,
+		ExtractorStatus:   summary.ExtractorStatus,
 		SummaryPath:       artifacts.Rel(req.RepoRoot, paths.SummaryJSON),
 		SummarySHA256:     summarySHA,
 		RawLogPath:        relRaw,
@@ -418,7 +421,7 @@ func materializeArtifactsWithExtractor(req model.RunRequest, cfg model.Config, p
 	}
 	statusDoc.StatusHash = artifacts.ComputeStatusHash(statusDoc)
 	if err := artifacts.WriteStatusJSON(paths, statusDoc); err != nil {
-		return runResult{}, model.RunOutput{}, err
+		return runResult{}, err
 	}
 
 	result := runResult{
@@ -435,7 +438,7 @@ func materializeArtifactsWithExtractor(req model.RunRequest, cfg model.Config, p
 	if extractionErr != nil {
 		result.diagnostic = safety.BoundBytes(redactor.Apply(extractionErr.Error()), safety.MaxExcerptBytes)
 	}
-	return result, runOutput, nil
+	return result, nil
 }
 
 func inferSummarizeStatus(raw []byte) (model.RunStatus, int) {
@@ -448,10 +451,15 @@ func inferSummarizeStatus(raw []byte) (model.RunStatus, int) {
 	return model.RunStatusPassed, 0
 }
 
-func writeExcerpts(redactor safety.Redactor, noiseFilters []string, paths model.ArtifactPaths, raw []byte, summary *model.Summary) error {
-	text := string(raw)
+func assignExcerptReferences(summary *model.Summary) {
 	for i := range summary.Failures {
-		failure := &summary.Failures[i]
+		summary.Failures[i].Excerpt = filepath.ToSlash(filepath.Join("excerpts", summary.Failures[i].ID+".log"))
+	}
+}
+
+func writeExcerpts(redactor safety.Redactor, noiseFilters []string, paths model.ArtifactPaths, raw []byte, failures []model.Failure) error {
+	text := string(raw)
+	for _, failure := range failures {
 		content := excerptContent(text, failure.RawSpan)
 		redacted := safety.FilterNoise(redactor.Apply(content), noiseFilters)
 		redacted = safety.BoundBytes(redacted, safety.MaxExcerptBytes)
@@ -462,7 +470,6 @@ func writeExcerpts(redactor safety.Redactor, noiseFilters []string, paths model.
 		if err := artifacts.WriteExcerpt(paths, excerptPath, redacted); err != nil {
 			return err
 		}
-		failure.Excerpt = filepath.ToSlash(filepath.Join("excerpts", failure.ID+".log"))
 	}
 	return nil
 }
@@ -504,8 +511,6 @@ func redactSummary(summary *model.Summary, redactor safety.Redactor, noiseFilter
 		warnings = append(warnings, warning)
 	}
 	summary.Warnings = warnings
-	summary.WarningCount = len(summary.Warnings)
-	summary.FailureCount = len(summary.Failures)
 }
 
 func cloneFailures(failures []model.Failure) []model.Failure {
@@ -541,15 +546,15 @@ func warningSignatureHashes(warnings []model.Warning) []string {
 	return out
 }
 
-func exitCodeFromRun(runOutput model.RunOutput) int {
-	switch runOutput.Status {
+func exitCodeFromResult(result runResult) int {
+	switch result.Status {
 	case model.RunStatusTimedOut:
 		return int(model.ExitCodeTimeout)
 	case model.RunStatusInternalErr:
 		return int(model.ExitCodeParserError)
 	default:
-		if runOutput.Metadata.ExitCode != 0 {
-			return runOutput.Metadata.ExitCode
+		if result.ExitCode != 0 {
+			return result.ExitCode
 		}
 		return 0
 	}

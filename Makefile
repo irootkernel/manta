@@ -64,9 +64,10 @@ vet:
 
 guardrails:
 	$(GO) test -count=1 ./internal/config -run '^TestValidateRejectsUnknownParser$$'
+	$(GO) test -count=1 ./internal/artifacts -run '^(TestBoundSummaryEvidenceCapsRecordsAndKeepsCountsAligned|TestBoundSummaryEvidenceUsesRenderedByteBudget|TestWriteSummaryJSONFailsWhenTooLarge|TestWriteSummaryJSONIncludesFalseTruncationFields)$$'
 	$(GO) test -count=1 ./internal/extract -run '^TestProcessExtractorStatusContract$$'
 	$(GO) test -count=1 ./internal/rules -run '^(TestLoadApplicableFailsOnInvalidDiscoveredFutureParserRule|TestLoadApplicableFailsOnInvalidMatchingRule|TestLoadApplicableRequiresAllRuleTags|TestRuleDetectsOvermatch)$$'
-	$(GO) test -count=1 ./internal/cli -run '^(TestMaterializeArtifactsExtractionErrorContract|TestOversizedFailedRunPreservesRawLog|TestOversizedPassingRunUsesBoundedExtraction|TestOversizedSummarizeUsesBoundedExtraction|TestRunAndSummarizeSelectRulesByAllTags|TestSummarizeRebuildsArtifactsFromRawLogOnly|TestRulesLifecycleCommands)$$'
+	$(GO) test -count=1 ./internal/cli -run '^(TestMaterializeArtifactsExtractionErrorContract|TestNoisyRunsWriteBoundedTerminalArtifacts|TestOversizedFailedRunPreservesRawLog|TestOversizedPassingRunUsesBoundedExtraction|TestOversizedSummarizeUsesBoundedExtraction|TestRunAndSummarizeSelectRulesByAllTags|TestSummarizeRebuildsArtifactsFromRawLogOnly|TestRulesLifecycleCommands)$$'
 	$(GO) test -count=1 ./e2e -run '^(TestBinaryTagInterfacesFailBeforeExecution|TestBinaryTagsSelectRulesByAllTags|TestRequirementTraceabilityMatrixCoversCompletedRequirements)$$'
 
 unit-test:

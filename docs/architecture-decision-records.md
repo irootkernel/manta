@@ -63,13 +63,14 @@ Large raw logs are expensive for human and LLM review, but auditability requires
 
 ### Decision
 
-Manta always preserves raw logs and writes compact summary JSON, summary Markdown, status JSON, and bounded excerpts. Noise filters affect summaries, not raw logs. Redaction applies to surfaced command metadata and extracted evidence. Raw logs remain original evidence and are not redacted by default; operators must be warned that raw logs may contain unredacted values. Stable artifact-reference fields remain literal locators so deterministic consumers can resolve them.
+Manta always preserves raw logs and writes compact summary JSON, summary Markdown, status JSON, and bounded excerpts. After noise filtering and redaction, summaries retain deterministic prefixes of at most 50 failures and 50 warnings and report any record or byte-budget truncation explicitly. Noise filters affect summaries, not raw logs. Redaction applies to surfaced command metadata and extracted evidence. Raw logs remain original evidence and are not redacted by default; operators must be warned that raw logs may contain unredacted values. Stable artifact-reference fields remain literal locators so deterministic consumers can resolve them.
 
 ### Consequences
 
 - Operators can review compact summaries first.
 - Raw evidence remains available for audit and rule improvement.
 - Summary artifacts can be consumed by automation, no-agent watchers, or humans.
+- Truncated summary evidence is marked degraded without changing the authoritative command result.
 - Raw-log sharing must be treated as a deliberate operator action.
 - Run IDs, command IDs, output directories, and other artifact-bearing path components must not contain secrets because usable artifact references are not rewritten by redaction.
 

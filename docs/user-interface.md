@@ -1,6 +1,6 @@
 # Manta User Interface
 
-Status: Complete through `HARDE-007`, `TAGS-001`, and `RELRV-001`
+Status: Complete through `HARDE-007`, `TAGS-001`, and `RELRV-002`
 Scope: CLI-first interface for Manta v0.1, including schema-v2 tag selectors and release-readiness follow-up
 
 This is the complete command reference. First-time users should begin with the repository [README](../README.md); parent-project owners should use the [integration guide](integration-guide.md) for ownership boundaries and adoption steps.
@@ -258,6 +258,7 @@ Tags are rule selectors, not command selectors or automatic rule generators. The
 - When tags are omitted, Manta infers `command_id` from the raw-log basename and uses that command ID as a single tag. For example, `unit.raw.log` produces `command_id: unit` and `tags: [unit]`. Repeat `--tag` to provide an explicit selector set instead.
 - Because original execution metadata is unavailable, summarize infers `status` and `exit_code` from raw-log evidence. Use `run` when authoritative execution metadata is required.
 - For inputs larger than 256 KiB, summarize preserves the complete copied raw log but extracts only from the final 256 KiB beginning at a complete line. The artifacts retain inferred status and exit code, report `extractor_status: degraded`, and the command exits `0` unless another error occurs.
+- Summary artifacts retain at most 50 failures and 50 warnings after redaction and noise filtering. The count fields equal retained array lengths; `failures_truncated` or `warnings_truncated` reports omitted evidence and makes `extractor_status` degraded without changing the command result.
 - If extraction fails internally, summarize still preserves the copied raw log and writes degraded `internal_error` summary/status artifacts with exit code `4`; the diagnostic is emitted on stderr.
 - Without `--run-id` or `--output-dir`, summarize copies the input raw log into a newly allocated `.manta/runs/standalone/<UTC-timestamp>[-NNN]/` directory and writes derived artifacts there. `--output-dir` uses the same collision-free allocation under `<output-dir>/runs/`; `--run-id` retains the fixed run-scoped layout. The original input remains unchanged.
 - Each summarize operation stores a complete raw-log copy in its artifact directory, so repeated summarization increases local storage usage in proportion to the source log size.
@@ -276,6 +277,8 @@ Tags are rule selectors, not command selectors or automatic rule generators. The
 | Manta artifact write error | documented internal code, recommended `3` |
 | Bounded-tail extraction after a passing test command | CLI `0`; artifacts use `passed` / `0` with `extractor_status: degraded` |
 | Bounded-tail extraction after a failing test command | underlying command exit code and status with `extractor_status: degraded` |
+| Evidence truncation after a passing test command | CLI `0`; artifacts use `passed` / `0` with `extractor_status: degraded` |
+| Evidence truncation after a failing test command | underlying command exit code and status with `extractor_status: degraded` |
 | Extraction internal error after a passing test command | CLI `4`; artifacts retain command exit `0` with `status: internal_error` |
 | Extraction internal error after a failed, timed-out, or killed command | original command exit code and status |
 | Extraction internal error during `summarize` | CLI and artifact exit code `4` with `status: internal_error` |
@@ -291,6 +294,8 @@ Status: failed
 Exit code: 1
 Duration: 0.0s
 Extractor: precise
+Failures: 1 (truncated: false)
+Warnings: 0 (truncated: false)
 Raw log: .manta/runs/scoped/summarize-example/artifacts/test/unit.raw.log
 Raw log SHA-256: sha256:...
 

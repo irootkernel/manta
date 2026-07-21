@@ -1,6 +1,6 @@
 # Manta Implementation Note
 
-Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, `TAGS-001`, and `RELRV-001` complete
+Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, `TAGS-001`, and `RELRV-001` through `RELRV-002` complete
 Scope: Maintainer guidance for the standalone Manta v0.1 implementation, schema-v2 tags, release-readiness follow-up, and future changes
 
 This document explains implementation constraints and verification expectations for contributors. It is not the parent-project adoption contract; integrators should start with the [integration guide](integration-guide.md).
@@ -87,12 +87,14 @@ Extractor status guidance:
 
 - `precise`: every accepted failure span has a file or test name.
 - `partial`: at least one accepted failure span has neither a file nor a test name.
-- `degraded`: a failed, timed-out, or killed command has no accepted failure span, extraction failed internally, or extraction inspected only a bounded tail of an oversized raw log.
+- `degraded`: a failed, timed-out, or killed command has no accepted failure span, extraction failed internally, extraction inspected only a bounded tail of an oversized raw log, or surfaced failure/warning records were truncated.
 - `no_match`: a passing command has no accepted failure span and extraction completed without an internal error; warnings may still be present.
 
 Extraction internal errors follow the artifact/CLI matrix in `architecture.md`. When artifact writes remain safe, Manta preserves raw evidence and materializes empty degraded evidence; bounded, redacted diagnostics go to stderr rather than the JSON schemas.
 
 For execution and summarize logs larger than 256 KiB, extraction uses the final 256 KiB beginning at the first complete line. It preserves absolute line and byte offsets into the full raw log and always reports `degraded`, including when the retained tail contains a precise match. An oversized unbroken line has no complete tail line to inspect. Rule-only `rules test` extraction remains fail closed above 256 KiB so overmatch validation is never based on a partial fixture.
+
+After redaction and noise filtering, retain deterministic prefixes of at most 50 failures and 50 warnings. Assign excerpt references before measuring the rendered formats, then retain the largest failure prefix that fits within 64 KiB in both summary JSON and Markdown before using the remaining budget for the largest warning prefix. Counts always equal retained array lengths, truncation degrades evidence quality, and excerpt files are written only for retained failures. Keep the writer size checks as fail-closed guards for non-evidence metadata overflow.
 
 ## Fixture-backed parser examples
 
@@ -159,9 +161,10 @@ Apply in this order for surfaced artifacts:
 
 1. Extract bounded spans from raw log.
 2. Copy execution metadata and extracted evidence into a surface-only summary.
-3. Redact and noise-filter bounded excerpts before writing them.
-4. Redact summary metadata and evidence, then write the summary artifacts.
-5. Derive status hashes and console metadata from the redacted summary, retaining literal artifact references.
+3. Assign literal excerpt references, then redact summary metadata and evidence and apply noise filtering.
+4. Apply the per-kind record caps and actual JSON/Markdown byte budget to the surfaced summary.
+5. Redact, noise-filter, bound, and write excerpts only for retained failures, then write both summary artifacts.
+6. Derive status hashes and console metadata from the final retained redacted summary, retaining literal artifact references.
 
 Raw-log policy is fixed: raw logs remain original local evidence and are not redacted by default. Artifact-reference fields remain literal and usable, so operators must not place secrets in artifact-bearing IDs or paths. Docs and CLI output should warn that raw logs may contain unredacted values.
 
@@ -189,6 +192,7 @@ Tests should cover:
 - Specialized parser misses with generic-looking markers, covering `no_match` for pass and `degraded` for failed, timed-out, and killed states without generic fallback, including a built-binary E2E probe.
 - Extraction internal errors after pass, failure, timeout, kill, and standalone summarize at the artifact-materialization boundary.
 - Oversized passing, failing, and summarize logs using bounded-tail extraction, including built-binary probes for preserved raw evidence, summary/status hashes, Markdown output, absolute spans, and CLI exit behavior.
+- Noisy passing, failing, and summarize logs that exceed failure/warning record caps, including authoritative or inferred exits, truncation fields, rendered size bounds, terminal status artifacts, retained signature hashes, and excerpt counts; also cover noise filtering and redaction expansion before bounding.
 - Exact generated Markdown shape for a fixed summary, plus a built-binary fresh-fixture workflow covering version, configured/ad-hoc run, summarize, excerpt, JSON output, and the complete rule lifecycle.
 - Unsupported historical `--verbose` and `--no-color` placeholders failing closed with config exit code `2`.
 - Actual `make install` and `make install-toolchain` execution in isolated temporary roots, including installed-version and resolver checks.

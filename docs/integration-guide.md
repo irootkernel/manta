@@ -186,18 +186,20 @@ Do not rewrite artifact-reference fields before resolving them. Redaction intent
 
 ## 5. Interpret result and evidence quality separately
 
-The parent project should model two dimensions:
+The parent project should model three dimensions:
 
 | Dimension | Fields | Meaning |
 |---|---|---|
 | Command result | `status`, `exit_code` | Authoritative execution outcome |
 | Evidence quality | `extractor_status` | `precise`, `partial`, `degraded`, or `no_match` |
+| Evidence completeness | `failures_truncated`, `warnings_truncated` | Whether the summary omitted records of that kind |
 
 Important cases:
 
 - A failed, timed-out, or killed command stays non-pass even if extraction is `degraded`.
 - A specialized-parser miss after a passing command is `passed` plus `no_match`.
 - A raw log larger than 256 KiB is extracted from a bounded complete-line tail and reports `degraded`; a passing command still remains `passed` with exit code `0`.
+- Summary JSON retains at most 50 failures and 50 warnings. `failure_count` and `warning_count` equal the retained array lengths; a true truncation field means additional records were omitted by the record or byte budget and the evidence quality is `degraded`.
 - An extraction internal error after a passing command leaves artifact `exit_code: 0`, sets artifact `status: internal_error`, and makes Manta exit `4`.
 - `summarize` has no authoritative process result; inferred status is evidence interpretation only.
 
@@ -227,6 +229,7 @@ Manta also writes `status_hash` from these final, redacted surfaced values. A pa
 Treat Manta output as factual test evidence only. A consumer should:
 
 - preserve the command result and `extractor_status` independently;
+- inspect truncation fields before treating the retained failure/warning arrays as complete;
 - preserve resolvable status, summary, and raw-log references;
 - normalize references on the consumer side when its schema differs;
 - not infer review, waiver, final, or acceptance state from Manta artifacts.

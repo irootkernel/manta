@@ -3,6 +3,7 @@ package e2e
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -337,6 +338,146 @@ func TestBinaryExtractionContracts(t *testing.T) {
 		assertBinaryMarkdownContract(t, repo, result, "failed", "7", "degraded")
 	})
 
+	t.Run("noisy passing command writes truncated warning artifacts", func(t *testing.T) {
+		repo := t.TempDir()
+		writeE2EConfig(t, repo, noisyScript("warning: noisy record", 0))
+
+		result, stderr := runBinaryJSONWithExit(t, bin, repo, 0, "run", "unit")
+		if stderr != "" {
+			t.Fatalf("expected no extraction diagnostic, got %q", stderr)
+		}
+		summary, status, raw := loadBinaryRunArtifacts(t, repo, result)
+		if result.Status != model.RunStatusPassed || result.ExitCode != 0 || result.Extractor != string(model.ExtractorStatusDegraded) || result.Failures != 0 {
+			t.Fatalf("unexpected noisy pass result: %+v", result)
+		}
+		if summary.Status != model.RunStatusPassed || summary.ExitCode != 0 || summary.ExtractorStatus != model.ExtractorStatusDegraded || summary.FailureCount != 0 || summary.WarningCount != safety.MaxSummaryWarnings || summary.FailuresTruncated || !summary.WarningsTruncated {
+			t.Fatalf("unexpected noisy pass summary: %+v", summary)
+		}
+		if len(summary.Warnings) != safety.MaxSummaryWarnings || summary.Warnings[len(summary.Warnings)-1].ID != "W050" || len(status.WarningSignatures) != safety.MaxSummaryWarnings {
+			t.Fatalf("unexpected retained warnings: summary=%d status=%d", len(summary.Warnings), len(status.WarningSignatures))
+		}
+		if bytes.Count(raw, []byte{'\n'}) != 5000 {
+			t.Fatalf("raw warning line count=%d, want 5000", bytes.Count(raw, []byte{'\n'}))
+		}
+		assertBinaryMarkdownContract(t, repo, result, "passed", "0", "degraded")
+	})
+
+	t.Run("noisy failing command retains exit and bounded excerpts", func(t *testing.T) {
+		repo := t.TempDir()
+		writeE2EConfig(t, repo, noisyScript("Error: noisy failure", 7))
+
+		result, stderr := runBinaryJSONWithExit(t, bin, repo, 7, "run", "unit")
+		if stderr != "" {
+			t.Fatalf("expected no extraction diagnostic, got %q", stderr)
+		}
+		summary, status, raw := loadBinaryRunArtifacts(t, repo, result)
+		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusFailed, 7, safety.MaxSummaryFailures)
+		if !summary.FailuresTruncated || summary.WarningsTruncated || len(summary.Failures) != safety.MaxSummaryFailures || summary.Failures[len(summary.Failures)-1].ID != "F050" {
+			t.Fatalf("unexpected noisy failure summary: %+v", summary)
+		}
+		if bytes.Count(raw, []byte{'\n'}) != 5000 {
+			t.Fatalf("raw failure line count=%d, want 5000", bytes.Count(raw, []byte{'\n'}))
+		}
+		excerptDir := filepath.Join(repo, filepath.Dir(filepath.FromSlash(status.SummaryPath)), "excerpts")
+		excerpts, err := os.ReadDir(excerptDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(excerpts) != safety.MaxSummaryFailures {
+			t.Fatalf("excerpt count=%d, want %d", len(excerpts), safety.MaxSummaryFailures)
+		}
+		assertBinaryMarkdownContract(t, repo, result, "failed", "7", "degraded")
+	})
+
+	t.Run("noisy summarize writes bounded terminal artifacts", func(t *testing.T) {
+		tests := []struct {
+			name              string
+			line              string
+			wantStatus        model.RunStatus
+			wantExitCode      int
+			wantFailures      int
+			wantWarnings      int
+			failuresTruncated bool
+			warningsTruncated bool
+		}{
+			{
+				name:              "inferred-pass-with-warnings",
+				line:              "warning: noisy record",
+				wantStatus:        model.RunStatusPassed,
+				wantWarnings:      safety.MaxSummaryWarnings,
+				warningsTruncated: true,
+			},
+			{
+				name:              "inferred-failure",
+				line:              "Error: noisy failure",
+				wantStatus:        model.RunStatusFailed,
+				wantExitCode:      1,
+				wantFailures:      safety.MaxSummaryFailures,
+				failuresTruncated: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				repo := t.TempDir()
+				raw := bytes.Repeat([]byte(tt.line+"\n"), 5000)
+				rawPath := filepath.Join(repo, tt.name+".raw.log")
+				if err := os.WriteFile(rawPath, raw, 0o644); err != nil {
+					t.Fatal(err)
+				}
+
+				result, stderr := runBinaryJSONWithExit(t, bin, repo, 0, "summarize", filepath.ToSlash(rawPath))
+				if stderr != "" {
+					t.Fatalf("expected no extraction diagnostic, got %q", stderr)
+				}
+				summary, status, copiedRaw := loadBinaryRunArtifacts(t, repo, result)
+				if !bytes.Equal(copiedRaw, raw) {
+					t.Fatal("noisy summarize did not preserve copied raw evidence")
+				}
+				if result.Status != tt.wantStatus || result.ExitCode != tt.wantExitCode || result.Extractor != string(model.ExtractorStatusDegraded) || result.Failures != tt.wantFailures {
+					t.Fatalf("unexpected summarize result: %+v", result)
+				}
+				if summary.Status != tt.wantStatus || summary.ExitCode != tt.wantExitCode || summary.ExtractorStatus != model.ExtractorStatusDegraded || summary.FailureCount != tt.wantFailures || len(summary.Failures) != tt.wantFailures || summary.WarningCount != tt.wantWarnings || len(summary.Warnings) != tt.wantWarnings {
+					t.Fatalf("unexpected summarize summary: %+v", summary)
+				}
+				if summary.FailuresTruncated != tt.failuresTruncated || summary.WarningsTruncated != tt.warningsTruncated {
+					t.Fatalf("unexpected summarize truncation flags: failures=%t warnings=%t", summary.FailuresTruncated, summary.WarningsTruncated)
+				}
+				if status.Status != tt.wantStatus || status.ExitCode != tt.wantExitCode || status.ExtractorStatus != model.ExtractorStatusDegraded || len(status.FailureSignatures) != tt.wantFailures || len(status.WarningSignatures) != tt.wantWarnings {
+					t.Fatalf("unexpected summarize status: %+v", status)
+				}
+				summaryPath := filepath.Join(repo, filepath.FromSlash(status.SummaryPath))
+				summaryData, err := os.ReadFile(summaryPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				markdownPath := filepath.Join(repo, filepath.FromSlash(result.Summary))
+				markdown, err := os.ReadFile(markdownPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(summaryData)-1 > safety.MaxSummaryBytes || len(markdown) > safety.MaxSummaryBytes {
+					t.Fatalf("summarize artifacts exceed limit: json=%d markdown=%d", len(summaryData)-1, len(markdown))
+				}
+				for _, want := range []string{
+					fmt.Sprintf("Failures: %d (truncated: %t)", tt.wantFailures, tt.failuresTruncated),
+					fmt.Sprintf("Warnings: %d (truncated: %t)", tt.wantWarnings, tt.warningsTruncated),
+				} {
+					if !strings.Contains(string(markdown), want) {
+						t.Fatalf("summarize Markdown missing %q", want)
+					}
+				}
+				excerpts, err := os.ReadDir(filepath.Join(filepath.Dir(summaryPath), "excerpts"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(excerpts) != tt.wantFailures {
+					t.Fatalf("summarize excerpt count=%d, want %d", len(excerpts), tt.wantFailures)
+				}
+			})
+		}
+	})
+
 	t.Run("oversized summarize uses bounded extraction", func(t *testing.T) {
 		repo := t.TempDir()
 		raw := bytes.Repeat([]byte("y"), safety.MaxRegexInputBytes+1)
@@ -356,6 +497,10 @@ func TestBinaryExtractionContracts(t *testing.T) {
 		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusPassed, 0, 0)
 		assertBinaryMarkdownContract(t, repo, result, "passed", "0", "degraded")
 	})
+}
+
+func noisyScript(line string, exitCode int) string {
+	return fmt.Sprintf("#!/bin/sh\ni=1\nwhile [ $i -le 5000 ]; do\n  printf '%%s %%04d\\n' %q \"$i\"\n  i=$((i + 1))\ndone\nexit %d\n", line, exitCode)
 }
 
 func TestBinaryStandaloneCollisionResistance(t *testing.T) {

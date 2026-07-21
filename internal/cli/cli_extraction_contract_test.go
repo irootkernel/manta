@@ -56,7 +56,7 @@ func TestMaterializeArtifactsExtractionErrorContract(t *testing.T) {
 				Status:      tt.status,
 				RawLogBytes: raw,
 			}
-			result, processed, err := materializeArtifactsWithExtractor(
+			result, err := materializeArtifactsWithExtractor(
 				req,
 				model.Config{},
 				paths,
@@ -72,11 +72,11 @@ func TestMaterializeArtifactsExtractionErrorContract(t *testing.T) {
 			if err != nil {
 				t.Fatalf("materializeArtifacts failed: %v", err)
 			}
-			if processed.Status != tt.wantStatus || processed.Metadata.ExitCode != tt.wantExitCode {
-				t.Fatalf("expected status/exit %s/%d, got %s/%d", tt.wantStatus, tt.wantExitCode, processed.Status, processed.Metadata.ExitCode)
+			if result.Status != tt.wantStatus || result.ExitCode != tt.wantExitCode {
+				t.Fatalf("expected status/exit %s/%d, got %s/%d", tt.wantStatus, tt.wantExitCode, result.Status, result.ExitCode)
 			}
-			if processed.ExtractorStatus != model.ExtractorStatusDegraded {
-				t.Fatalf("expected degraded extraction, got %s", processed.ExtractorStatus)
+			if result.Extractor != string(model.ExtractorStatusDegraded) {
+				t.Fatalf("expected degraded extraction, got %s", result.Extractor)
 			}
 			if !strings.Contains(result.diagnostic, "forced extraction failure") {
 				t.Fatalf("expected extraction diagnostic, got %q", result.diagnostic)
@@ -142,6 +142,144 @@ func TestOversizedPassingRunUsesBoundedExtraction(t *testing.T) {
 	copiedRaw := assertDegradedArtifacts(t, baseDir, "huge-pass", model.RunStatusPassed, 0)
 	if !bytes.Equal(copiedRaw, raw) {
 		t.Fatal("expected run to preserve the original raw bytes")
+	}
+}
+
+func TestNoisyRunsWriteBoundedTerminalArtifacts(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name              string
+		line              string
+		commandExit       int
+		wantStatus        model.RunStatus
+		wantFailures      int
+		wantWarnings      int
+		failuresTruncated bool
+		warningsTruncated bool
+	}{
+		{
+			name:              "passing-warnings",
+			line:              "warning: noisy record",
+			commandExit:       0,
+			wantStatus:        model.RunStatusPassed,
+			wantWarnings:      safety.MaxSummaryWarnings,
+			warningsTruncated: true,
+		},
+		{
+			name:              "failing-errors",
+			line:              "Error: noisy failure",
+			commandExit:       7,
+			wantStatus:        model.RunStatusFailed,
+			wantFailures:      safety.MaxSummaryFailures,
+			failuresTruncated: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			repo := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(repo, ".manta"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			configText := strings.Join([]string{
+				"version: 2",
+				"commands:",
+				"  noisy:",
+				"    command: [\"sh\", \"noisy.sh\"]",
+				"    tags: [unit]",
+				"    parser: generic",
+				"    timeout_sec: 10",
+			}, "\n") + "\n"
+			if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(configText), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			script := fmt.Sprintf("#!/bin/sh\ni=1\nwhile [ $i -le 5000 ]; do\n  printf '%%s %%04d\\n' %q \"$i\"\n  i=$((i + 1))\ndone\nexit %d\n", tt.line, tt.commandExit)
+			if err := os.WriteFile(filepath.Join(repo, "noisy.sh"), []byte(script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+
+			var stdout, stderr bytes.Buffer
+			exitCode := Main([]string{"--repo", repo, "--run-id", "bounded-" + tt.name, "--json", "run", "noisy"}, &stdout, &stderr)
+			if exitCode != tt.commandExit {
+				t.Fatalf("exit=%d, want %d; stderr=%s", exitCode, tt.commandExit, stderr.String())
+			}
+			if stderr.Len() != 0 {
+				t.Fatalf("unexpected diagnostic: %s", stderr.String())
+			}
+			var result runResult
+			if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+				t.Fatalf("decode result %q: %v", stdout.String(), err)
+			}
+			if result.Status != tt.wantStatus || result.ExitCode != tt.commandExit || result.Extractor != string(model.ExtractorStatusDegraded) || result.Failures != tt.wantFailures {
+				t.Fatalf("unexpected result: %+v", result)
+			}
+
+			baseDir := filepath.Join(repo, ".manta", "runs", "scoped", "bounded-"+tt.name, "artifacts", "test")
+			summaryPath := filepath.Join(baseDir, "noisy.summary.json")
+			statusPath := filepath.Join(baseDir, "noisy.status.json")
+			markdownPath := filepath.Join(baseDir, "noisy.summary.md")
+			for _, path := range []string{filepath.Join(baseDir, "noisy.raw.log"), summaryPath, markdownPath, statusPath} {
+				if _, err := os.Stat(path); err != nil {
+					t.Fatalf("expected artifact %s: %v", path, err)
+				}
+			}
+
+			var summary model.Summary
+			readJSONArtifact(t, summaryPath, &summary)
+			if summary.Status != tt.wantStatus || summary.ExitCode != tt.commandExit || summary.ExtractorStatus != model.ExtractorStatusDegraded {
+				t.Fatalf("unexpected summary status: %+v", summary)
+			}
+			if summary.FailureCount != tt.wantFailures || len(summary.Failures) != tt.wantFailures || summary.WarningCount != tt.wantWarnings || len(summary.Warnings) != tt.wantWarnings {
+				t.Fatalf("summary counts do not match arrays: failures=%d/%d warnings=%d/%d", summary.FailureCount, len(summary.Failures), summary.WarningCount, len(summary.Warnings))
+			}
+			if summary.FailuresTruncated != tt.failuresTruncated || summary.WarningsTruncated != tt.warningsTruncated {
+				t.Fatalf("unexpected truncation flags: failures=%t warnings=%t", summary.FailuresTruncated, summary.WarningsTruncated)
+			}
+			if len(summary.Failures) > 0 && summary.Failures[len(summary.Failures)-1].ID != "F050" {
+				t.Fatalf("expected failure prefix through F050, got %q", summary.Failures[len(summary.Failures)-1].ID)
+			}
+			if len(summary.Warnings) > 0 && summary.Warnings[len(summary.Warnings)-1].ID != "W050" {
+				t.Fatalf("expected warning prefix through W050, got %q", summary.Warnings[len(summary.Warnings)-1].ID)
+			}
+
+			summaryData, err := os.ReadFile(summaryPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			markdown, err := os.ReadFile(markdownPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(summaryData)-1 > safety.MaxSummaryBytes || len(markdown) > safety.MaxSummaryBytes {
+				t.Fatalf("summary artifacts exceed limit: json=%d markdown=%d", len(summaryData)-1, len(markdown))
+			}
+			for _, want := range []string{
+				fmt.Sprintf("Failures: %d (truncated: %t)", tt.wantFailures, tt.failuresTruncated),
+				fmt.Sprintf("Warnings: %d (truncated: %t)", tt.wantWarnings, tt.warningsTruncated),
+			} {
+				if !strings.Contains(string(markdown), want) {
+					t.Fatalf("Markdown missing %q", want)
+				}
+			}
+
+			var status model.Status
+			readJSONArtifact(t, statusPath, &status)
+			if status.Status != tt.wantStatus || status.ExitCode != tt.commandExit || status.ExtractorStatus != model.ExtractorStatusDegraded || status.StatusHash != artifacts.ComputeStatusHash(status) || status.SummarySHA256 != artifacts.SHA256(summaryData) {
+				t.Fatalf("unexpected status contract: %+v", status)
+			}
+			if len(status.FailureSignatures) != tt.wantFailures || len(status.WarningSignatures) != tt.wantWarnings {
+				t.Fatalf("unexpected status signature counts: failures=%d warnings=%d", len(status.FailureSignatures), len(status.WarningSignatures))
+			}
+
+			excerptEntries, err := os.ReadDir(filepath.Join(baseDir, "excerpts"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(excerptEntries) != tt.wantFailures {
+				t.Fatalf("excerpt count=%d, want %d", len(excerptEntries), tt.wantFailures)
+			}
+		})
 	}
 }
 

@@ -160,22 +160,24 @@ type RunMetadata struct {
 }
 
 type Summary struct {
-	Status          RunStatus       `json:"status"`
-	CommandID       string          `json:"command_id"`
-	Tags            []string        `json:"tags"`
-	Parser          string          `json:"parser"`
-	CommandArgv     []string        `json:"command_argv"`
-	ExitCode        int             `json:"exit_code"`
-	StartedAt       time.Time       `json:"started_at"`
-	EndedAt         time.Time       `json:"ended_at"`
-	DurationMS      int64           `json:"duration_ms"`
-	RawLog          string          `json:"raw_log"`
-	RawLogSHA256    string          `json:"raw_log_sha256"`
-	ExtractorStatus ExtractorStatus `json:"extractor_status"`
-	FailureCount    int             `json:"failure_count"`
-	WarningCount    int             `json:"warning_count"`
-	Failures        []Failure       `json:"failures"`
-	Warnings        []Warning       `json:"warnings"`
+	Status            RunStatus       `json:"status"`
+	CommandID         string          `json:"command_id"`
+	Tags              []string        `json:"tags"`
+	Parser            string          `json:"parser"`
+	CommandArgv       []string        `json:"command_argv"`
+	ExitCode          int             `json:"exit_code"`
+	StartedAt         time.Time       `json:"started_at"`
+	EndedAt           time.Time       `json:"ended_at"`
+	DurationMS        int64           `json:"duration_ms"`
+	RawLog            string          `json:"raw_log"`
+	RawLogSHA256      string          `json:"raw_log_sha256"`
+	ExtractorStatus   ExtractorStatus `json:"extractor_status"`
+	FailureCount      int             `json:"failure_count"`
+	WarningCount      int             `json:"warning_count"`
+	FailuresTruncated bool            `json:"failures_truncated"`
+	WarningsTruncated bool            `json:"warnings_truncated"`
+	Failures          []Failure       `json:"failures"`
+	Warnings          []Warning       `json:"warnings"`
 }
 
 type Status struct {

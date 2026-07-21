@@ -1,6 +1,6 @@
 # Manta Requirement Specs
 
-Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, `TAGS-001`, and `RELRV-001` complete
+Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, `TAGS-001`, and `RELRV-001` through `RELRV-002` complete
 Scope: Manta v0.1 standalone baseline, post-baseline hardening, schema-v2 tag selectors, and release-readiness follow-up
 Source context: standalone deterministic Manta v0.1 CLI behavior and evidence contracts.
 
@@ -44,8 +44,8 @@ Implementation note: the original v0.1 roadmap and the recorded `RQHAR` hardenin
 
 - [x] `MANTA-REQ-RQART-001` Write raw log artifacts to `.manta/runs/scoped/<run_id>/artifacts/test/<command-id>.raw.log` when a run ID is supplied.
 - [x] `MANTA-REQ-RQART-002` Support standalone artifact output under `.manta/` or a caller-specified output directory when `--run-id` is not supplied.
-- [x] `MANTA-REQ-RQART-003` Write summary JSON with execution status, command ID, canonical tags, parser and argv metadata, raw-log path, raw-log SHA-256, extractor status, failure count, warning count, failure spans, warning spans, and excerpt references.
-- [x] `MANTA-REQ-RQART-004` Write summary Markdown for human review.
+- [x] `MANTA-REQ-RQART-003` Write summary JSON with execution status, command ID, canonical tags, parser and argv metadata, raw-log path, raw-log SHA-256, extractor status, retained failure/warning counts, per-kind truncation indicators, failure spans, warning spans, and excerpt references.
+- [x] `MANTA-REQ-RQART-004` Write summary Markdown for human review, including retained failure/warning counts and truncation state.
 - [x] `MANTA-REQ-RQART-005` Write status JSON suitable for no-agent watchers.
 - [x] `MANTA-REQ-RQART-006` Write failure excerpt files for bounded review without replaying full raw logs.
 - [x] `MANTA-REQ-RQART-007` Keep all generated artifact paths stable and relative to the repository root where practical.
@@ -56,7 +56,7 @@ Implementation note: the original v0.1 roadmap and the recorded `RQHAR` hardenin
 - [x] `MANTA-REQ-RQEXT-002` Support parser labels such as `generic`, `vitest`, `pytest`, `go-test`, and `playwright`, while requiring only `generic` in the first runnable implementation slice.
 - [x] `MANTA-REQ-RQEXT-003` Extract bounded failure spans with start/end line and byte offsets.
 - [x] `MANTA-REQ-RQEXT-004` Extract signature, file, line, test name, stack-top entries, and excerpt path when available.
-- [x] `MANTA-REQ-RQEXT-005` Report `extractor_status` as `precise`, `partial`, `degraded`, or `no_match`.
+- [x] `MANTA-REQ-RQEXT-005` Report `extractor_status` as `precise`, `partial`, `degraded`, or `no_match`, with degraded evidence when surfaced records are truncated.
 - [x] `MANTA-REQ-RQEXT-006` Report degraded extraction when a failed, timed-out, or killed command has no useful failure span.
 - [x] `MANTA-REQ-RQEXT-007` Never use extraction rules, parser matches, or parser misses to override the executed command's exit code or authoritative non-pass status.
 
@@ -76,7 +76,7 @@ Implementation note: the original v0.1 roadmap and the recorded `RQHAR` hardenin
 - [x] `MANTA-REQ-RQSEC-001` Redact configured secrets and sensitive values from summaries, excerpts, and status files while retaining literal artifact-reference fields required for deterministic lookup.
 - [x] `MANTA-REQ-RQSEC-002` Preserve raw logs as original evidence, clearly mark that they may contain unredacted data, and avoid treating them as share-safe artifacts.
 - [x] `MANTA-REQ-RQSEC-003` Fail closed on unsupported config versions, malformed config, missing command definitions, missing or unsafe tags, invalid or unsupported regex, artifact-write failure, or unsupported parser configuration.
-- [x] `MANTA-REQ-RQSEC-004` Bound extracted block size, excerpt size, summary size, and regex input size. For execution and summarize logs larger than 256 KiB, scan only the final bounded complete-line window and report degraded extraction while preserving the full raw log; rule fixture testing remains fail closed above the input bound.
+- [x] `MANTA-REQ-RQSEC-004` Bound extracted block size, excerpt size, summary size, regex input size, and surfaced evidence counts. Retain at most 50 failures and 50 warnings, reducing deterministic prefixes further when the rendered JSON or Markdown byte budget requires it by retaining the largest fitting failure prefix first and using the remaining budget for the largest warning prefix. For execution and summarize logs larger than 256 KiB, scan only the final bounded complete-line window and report degraded extraction while preserving the full raw log; rule fixture testing remains fail closed above the input bound.
 - [x] `MANTA-REQ-RQSEC-005` Avoid broad fallback behavior; a specialized-parser miss reports `no_match` after a pass and `degraded` after a non-pass result, while an accepted span with missing key metadata remains `partial`.
 
 ## RQWAT: Watcher status compatibility

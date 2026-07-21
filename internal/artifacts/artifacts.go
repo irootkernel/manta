@@ -119,7 +119,7 @@ func ValidateRawLog(paths model.ArtifactPaths) error {
 }
 
 func WriteSummaryJSON(paths model.ArtifactPaths, summary model.Summary) (string, error) {
-	data, err := json.MarshalIndent(summary, "", "  ")
+	data, err := marshalSummaryJSON(summary)
 	if err != nil {
 		return "", model.NewMantaError(model.ExitCodeArtifactError, "marshal summary json", err)
 	}
@@ -142,12 +142,103 @@ func WriteStatusJSON(paths model.ArtifactPaths, status model.Status) error {
 }
 
 func WriteSummaryMarkdown(paths model.ArtifactPaths, summary model.Summary) error {
+	markdown := renderSummaryMarkdown(summary)
+	if len(markdown) > safety.MaxSummaryBytes {
+		return model.NewMantaError(model.ExitCodeArtifactError, "write summary markdown", fmt.Errorf("summary markdown exceeds %d bytes", safety.MaxSummaryBytes))
+	}
+	return writeArtifact(paths, paths.SummaryMD, []byte(markdown), "write summary markdown")
+}
+
+// BoundSummaryEvidence keeps deterministic evidence prefixes that fit both
+// summary artifact formats. Failures receive byte-budget priority because they
+// explain the authoritative non-pass result.
+func BoundSummaryEvidence(summary model.Summary) (model.Summary, error) {
+	failureLimit := min(len(summary.Failures), safety.MaxSummaryFailures)
+	warningLimit := min(len(summary.Warnings), safety.MaxSummaryWarnings)
+	failures := append([]model.Failure(nil), summary.Failures[:failureLimit]...)
+	warnings := append([]model.Warning(nil), summary.Warnings[:warningLimit]...)
+	failuresTruncated := summary.FailuresTruncated || failureLimit < len(summary.Failures)
+	warningsTruncated := summary.WarningsTruncated || warningLimit < len(summary.Warnings)
+
+	candidate := func(failureCount, warningCount int) model.Summary {
+		bounded := summary
+		bounded.Failures = failures[:failureCount]
+		bounded.Warnings = warnings[:warningCount]
+		bounded.FailuresTruncated = failuresTruncated || failureCount < len(failures)
+		bounded.WarningsTruncated = warningsTruncated || warningCount < len(warnings)
+		syncSummaryEvidenceMetadata(&bounded)
+		return bounded
+	}
+	fits := func(bounded model.Summary) (bool, error) {
+		jsonData, err := marshalSummaryJSON(bounded)
+		if err != nil {
+			return false, model.NewMantaError(model.ExitCodeArtifactError, "marshal summary json", err)
+		}
+		return len(jsonData) <= safety.MaxSummaryBytes && len(renderSummaryMarkdown(bounded)) <= safety.MaxSummaryBytes, nil
+	}
+	allEvidence := candidate(len(failures), len(warnings))
+	allFits, err := fits(allEvidence)
+	if err != nil {
+		return model.Summary{}, err
+	}
+	if allFits {
+		return allEvidence, nil
+	}
+	emptyEvidence := candidate(0, 0)
+	emptyFits, err := fits(emptyEvidence)
+	if err != nil {
+		return model.Summary{}, err
+	}
+	if !emptyFits {
+		return model.Summary{}, model.NewMantaError(model.ExitCodeArtifactError, "bound summary evidence", fmt.Errorf("summary metadata exceeds %d bytes", safety.MaxSummaryBytes))
+	}
+
+	failureCount := len(failures)
+	for failureCount > 0 {
+		failuresFit, err := fits(candidate(failureCount, 0))
+		if err != nil {
+			return model.Summary{}, err
+		}
+		if failuresFit {
+			break
+		}
+		failureCount--
+	}
+	warningCount := 0
+	for warningCount < len(warnings) {
+		warningsFit, err := fits(candidate(failureCount, warningCount+1))
+		if err != nil {
+			return model.Summary{}, err
+		}
+		if !warningsFit {
+			break
+		}
+		warningCount++
+	}
+	return candidate(failureCount, warningCount), nil
+}
+
+func syncSummaryEvidenceMetadata(summary *model.Summary) {
+	summary.FailureCount = len(summary.Failures)
+	summary.WarningCount = len(summary.Warnings)
+	if summary.FailuresTruncated || summary.WarningsTruncated {
+		summary.ExtractorStatus = model.ExtractorStatusDegraded
+	}
+}
+
+func marshalSummaryJSON(summary model.Summary) ([]byte, error) {
+	return json.MarshalIndent(summary, "", "  ")
+}
+
+func renderSummaryMarkdown(summary model.Summary) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Manta Summary: %s\n\n", summary.CommandID)
 	fmt.Fprintf(&b, "Status: %s\n", summary.Status)
 	fmt.Fprintf(&b, "Exit code: %d\n", summary.ExitCode)
 	fmt.Fprintf(&b, "Duration: %.1fs\n", float64(summary.DurationMS)/1000)
 	fmt.Fprintf(&b, "Extractor: %s\n", summary.ExtractorStatus)
+	fmt.Fprintf(&b, "Failures: %d (truncated: %t)\n", summary.FailureCount, summary.FailuresTruncated)
+	fmt.Fprintf(&b, "Warnings: %d (truncated: %t)\n", summary.WarningCount, summary.WarningsTruncated)
 	fmt.Fprintf(&b, "Raw log: %s\n", summary.RawLog)
 	fmt.Fprintf(&b, "Raw log SHA-256: %s\n\n", summary.RawLogSHA256)
 	if len(summary.Failures) > 0 {
@@ -175,11 +266,7 @@ func WriteSummaryMarkdown(paths model.ArtifactPaths, summary model.Summary) erro
 	}
 	b.WriteString("## Notes\n\n")
 	b.WriteString("Command exit code is authoritative. Extraction rules only summarize evidence.\n")
-	markdown := b.String()
-	if len(markdown) > safety.MaxSummaryBytes {
-		return model.NewMantaError(model.ExitCodeArtifactError, "write summary markdown", fmt.Errorf("summary markdown exceeds %d bytes", safety.MaxSummaryBytes))
-	}
-	return writeArtifact(paths, paths.SummaryMD, []byte(markdown), "write summary markdown")
+	return b.String()
 }
 
 func WriteExcerpt(paths model.ArtifactPaths, path string, content string) error {

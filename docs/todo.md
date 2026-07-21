@@ -1,6 +1,6 @@
 # Manta Todo
 
-Status: 8 open items from the v0.1.4 release-readiness review
+Status: 7 open items from the v0.1.4 release-readiness review
 Scope: Documentation and implementation follow-up notes
 
 ## Todo status legend
@@ -16,13 +16,6 @@ Tag and publish `v0.1.4` only after the items below are closed and the release-r
 ## Open items
 
 Items are listed in recommended fix order. Line references were verified against the current tree and may drift as fixes land.
-
-### RELRV-002 `Open` — Cap failure/warning counts so summaries stay writable
-
-- Severity: high (empirically reproduced).
-- Problem: extracted failure/warning records are unbounded, while `WriteSummaryJSON` hard-fails above `safety.MaxSummaryBytes` (64 KiB). A passing command that prints 5,000 `warning:` lines aborts with artifact exit `3` and writes no summary, Markdown, or status artifact at all, so watchers never observe a terminal state.
-- Evidence: `internal/extract/extract.go:166-175` (unbounded generic warnings; parser failure loops are also uncapped); `internal/artifacts/artifacts.go:126-129`.
-- Done when: failure and warning counts have explicit caps with a truncation indicator in summary artifacts, summary JSON stays under its size bound by construction, the run keeps its authoritative exit code, and tests cover noisy passing and failing logs.
 
 ### RELRV-003 `Open` — Playwright parser misses failure headers without trailing padding
 

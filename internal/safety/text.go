@@ -13,6 +13,8 @@ const (
 	MaxSummaryBytes    = 64 * 1024
 	MaxExcerptBytes    = 16 * 1024
 	MaxBlockLines      = 160
+	MaxSummaryFailures = 50
+	MaxSummaryWarnings = 50
 )
 
 type redactionRule struct {
