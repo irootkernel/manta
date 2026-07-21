@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
+	"github.com/irootkernel/manta/internal/model"
+	"github.com/irootkernel/manta/internal/safety"
 )
 
 var (

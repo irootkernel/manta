@@ -1,12 +1,11 @@
 GO ?= go
 GOLANGCI_LINT ?= golangci-lint
-BINARY := kkachi-agent-tester
+BINARY := manta
 BIN_DIR := bin
-VERSION ?= 0.1.3
+VERSION ?= 0.1.4
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-TOOLCHAIN_ROOT ?= $(HOME)/.local/kkachi/toolchains
-TOOLCHAIN_COMPONENT := kat
+TOOLCHAIN_ROOT ?= $(HOME)/.local/manta/toolchains
 TOOLCHAIN_VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null | sed 's/^v//' || true)
 LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildDate=$(BUILD_DATE)
 
@@ -35,7 +34,7 @@ install-toolchain:
 	$(MAKE) build VERSION="$$VERSION_VALUE"; \
 	VERSION_TAG="v$$VERSION_VALUE"; \
 	case "$$VERSION_TAG" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "ERROR: unsupported $(BINARY) version for toolchain install: $$VERSION_VALUE" >&2; exit 1 ;; esac; \
-	INSTALL_DIR="$(TOOLCHAIN_ROOT)/$(TOOLCHAIN_COMPONENT)/$$VERSION_TAG/bin"; \
+	INSTALL_DIR="$(TOOLCHAIN_ROOT)/$$VERSION_TAG/bin"; \
 	mkdir -p "$$INSTALL_DIR"; \
 	install -m 0755 "$(BIN_DIR)/$(BINARY)" "$$INSTALL_DIR/$(BINARY)"; \
 	INSTALLED_VERSION="$$($$INSTALL_DIR/$(BINARY) --version | awk '{print $$2}')"; \

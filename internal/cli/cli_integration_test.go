@@ -11,14 +11,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/artifacts"
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/irootkernel/manta/internal/artifacts"
+	"github.com/irootkernel/manta/internal/model"
 )
 
 func TestConfiguredRunAndExcerpt(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repo, ".kkachi", "tester"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, ".manta", "tester"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	configText := strings.Join([]string{
@@ -35,7 +35,7 @@ func TestConfiguredRunAndExcerpt(t *testing.T) {
 		"      regex: 'token=[^ ]+'",
 		"      replace: 'token=<redacted>'",
 	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(configText), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	script := "#!/bin/sh\necho 'noise: start'\necho 'TypeError: token=secret failed'\necho 'src/foo.test.ts:42:13'\necho '✗ renders empty state'\nexit 1\n"
@@ -47,12 +47,12 @@ func TestConfiguredRunAndExcerpt(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d stderr=%s", exitCode, stderr.String())
 	}
-	katDir := filepath.Join(repo, ".kat", "runs")
-	entries, err := os.ReadDir(katDir)
+	mantaDir := filepath.Join(repo, ".manta", "runs", "standalone")
+	entries, err := os.ReadDir(mantaDir)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("expected one run directory, err=%v entries=%d", err, len(entries))
 	}
-	runDir := filepath.Join(katDir, entries[0].Name())
+	runDir := filepath.Join(mantaDir, entries[0].Name())
 	summaryJSONPath := filepath.Join(runDir, "unit.summary.json")
 	rawLogPath := filepath.Join(runDir, "unit.raw.log")
 	statusJSONPath := filepath.Join(runDir, "unit.status.json")
@@ -136,7 +136,7 @@ func TestConfiguredRunAndExcerpt(t *testing.T) {
 func TestConfiguredRunRedactsSurfacedMetadata(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repo, ".kkachi"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, ".manta"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	configText := strings.Join([]string{
@@ -153,7 +153,7 @@ func TestConfiguredRunRedactsSurfacedMetadata(t *testing.T) {
 		"      regex: 'secret_[a-z_]+'",
 		"      replace: '<redacted>'",
 	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(configText), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	script := strings.Join([]string{
@@ -270,7 +270,7 @@ func TestConfiguredRunRedactsSurfacedMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(markdownData), "# KAT Summary: command_<redacted>") {
+	if !strings.Contains(string(markdownData), "# Manta Summary: command_<redacted>") {
 		t.Fatalf("expected redacted markdown heading, got %q", markdownData)
 	}
 	if !strings.Contains(string(markdownData), "command_secret_id.raw.log") {
@@ -291,7 +291,7 @@ func TestConfiguredRunRedactsSurfacedMetadata(t *testing.T) {
 func TestAdHocRunRedactsSurfacedMetadata(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repo, ".kkachi"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, ".manta"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	configText := strings.Join([]string{
@@ -302,7 +302,7 @@ func TestAdHocRunRedactsSurfacedMetadata(t *testing.T) {
 		"      regex: 'secret_[a-z_]+'",
 		"      replace: '<redacted>'",
 	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(configText), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(repo, "adhoc.sh"), []byte("#!/bin/sh\nprintf '%s\\n' \"$1\"\n"), 0o755); err != nil {
@@ -377,7 +377,7 @@ func TestRawLogOpenFailurePreventsCommandExecution(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
 	writeMarkerCommandConfig(t, repo, "unit")
-	base := filepath.Join(repo, ".kkachi", "runs", "run-001", "artifacts", "test")
+	base := filepath.Join(repo, ".manta", "runs", "scoped", "run-001", "artifacts", "test")
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +408,7 @@ func TestRawLogOpenFailurePreventsCommandExecution(t *testing.T) {
 func TestTimeoutPreservesPartialArtifacts(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repo, ".kkachi"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, ".manta"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	configText := strings.Join([]string{
@@ -420,7 +420,7 @@ func TestTimeoutPreservesPartialArtifacts(t *testing.T) {
 		"    parser: generic",
 		"    timeout_sec: 1",
 	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(configText), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	script := "#!/bin/sh\necho started\nsleep 30\necho finished\n"
@@ -437,7 +437,7 @@ func TestTimeoutPreservesPartialArtifacts(t *testing.T) {
 		t.Fatalf("expected timed_out console result, got %q", stdout.String())
 	}
 
-	base := filepath.Join(repo, ".kkachi", "runs", "timeout-run", "artifacts", "test")
+	base := filepath.Join(repo, ".manta", "runs", "scoped", "timeout-run", "artifacts", "test")
 	raw, err := os.ReadFile(filepath.Join(base, "timeout.raw.log"))
 	if err != nil {
 		t.Fatal(err)
@@ -512,8 +512,8 @@ func TestExcerptSymlinkContainment(t *testing.T) {
 	t.Run("cross-run rejected", func(t *testing.T) {
 		t.Parallel()
 		repo := t.TempDir()
-		runA := filepath.Join(repo, ".kkachi", "runs", "run-a", "artifacts", "test")
-		runB := filepath.Join(repo, ".kkachi", "runs", "run-b", "artifacts", "test")
+		runA := filepath.Join(repo, ".manta", "runs", "scoped", "run-a", "artifacts", "test")
+		runB := filepath.Join(repo, ".manta", "runs", "scoped", "run-b", "artifacts", "test")
 		if err := os.MkdirAll(filepath.Join(runA, "excerpts"), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -620,7 +620,7 @@ func writeExcerptSummary(t *testing.T, dir, reference string) string {
 
 func writeMarkerCommandConfig(t *testing.T, repo, commandID string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Join(repo, ".kkachi"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, ".manta"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	configText := strings.Join([]string{
@@ -632,7 +632,7 @@ func writeMarkerCommandConfig(t *testing.T, repo, commandID string) {
 		"    parser: generic",
 		"    timeout_sec: 10",
 	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(configText), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(repo, "touch-marker.sh"), []byte("#!/bin/sh\ntouch command-ran\n"), 0o755); err != nil {
@@ -643,7 +643,7 @@ func writeMarkerCommandConfig(t *testing.T, repo, commandID string) {
 func TestSummarizeRawLogUsesConfigRedaction(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repo, ".kkachi", "tester"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, ".manta", "tester"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	configText := strings.Join([]string{
@@ -657,7 +657,7 @@ func TestSummarizeRawLogUsesConfigRedaction(t *testing.T) {
 		"      regex: 'secret_[a-z_]+'",
 		"      replace: '<redacted>'",
 	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(configText), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	rawDir := filepath.Join(repo, "fixtures")
@@ -684,7 +684,7 @@ func TestSummarizeRawLogUsesConfigRedaction(t *testing.T) {
 			t.Fatalf("expected literal summarize artifact reference, got %q", path)
 		}
 	}
-	runsDir := filepath.Join(repo, ".kat", "runs")
+	runsDir := filepath.Join(repo, ".manta", "runs", "standalone")
 	entries, err := os.ReadDir(runsDir)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("expected one standalone summarize directory, err=%v entries=%d", err, len(entries))
@@ -766,7 +766,7 @@ func assertNoSecret(t *testing.T, label, value string) {
 func TestStandaloneOperationsUseDistinctRunDirectories(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repo, ".kkachi"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, ".manta"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	configText := strings.Join([]string{
@@ -778,7 +778,7 @@ func TestStandaloneOperationsUseDistinctRunDirectories(t *testing.T) {
 		"    parser: generic",
 		"    timeout_sec: 10",
 	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(configText), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(repo, "configured.sh"), []byte("#!/bin/sh\nprintf 'configured\\n'\n"), 0o755); err != nil {
@@ -871,7 +871,7 @@ func TestAdHocRunWithoutConfig(t *testing.T) {
 func TestRawLogPersistsWhenExtractionFails(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repo, ".kkachi", "tester"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, ".manta", "tester"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	configText := strings.Join([]string{
@@ -883,7 +883,7 @@ func TestRawLogPersistsWhenExtractionFails(t *testing.T) {
 		"    parser: generic",
 		"    timeout_sec: 10",
 	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(configText), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	script := "#!/bin/sh\npython3 - <<'PY'\nprint('x' * 300000)\nPY\nexit 1\n"
@@ -901,7 +901,7 @@ func TestRawLogPersistsWhenExtractionFails(t *testing.T) {
 	if !strings.Contains(stderr.String(), "regex input bound") {
 		t.Fatalf("expected extraction diagnostic on stderr, got %q", stderr.String())
 	}
-	runsDir := filepath.Join(repo, ".kat", "runs")
+	runsDir := filepath.Join(repo, ".manta", "runs", "standalone")
 	entries, err := os.ReadDir(runsDir)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("expected one run directory, err=%v entries=%d", err, len(entries))
@@ -948,7 +948,7 @@ func TestRawLogPersistsWhenExtractionFails(t *testing.T) {
 func TestConfiguredVitestRunUsesSpecializedParser(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repo, ".kkachi", "tester"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, ".manta", "tester"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	configText := strings.Join([]string{
@@ -960,7 +960,7 @@ func TestConfiguredVitestRunUsesSpecializedParser(t *testing.T) {
 		"    parser: vitest",
 		"    timeout_sec: 10",
 	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(configText), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	script := strings.Join([]string{
@@ -980,7 +980,7 @@ func TestConfiguredVitestRunUsesSpecializedParser(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("expected vitest run to preserve exit code 1, got %d stderr=%s", exitCode, stderr.String())
 	}
-	runsDir := filepath.Join(repo, ".kat", "runs")
+	runsDir := filepath.Join(repo, ".manta", "runs", "standalone")
 	entries, err := os.ReadDir(runsDir)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("expected one run directory, err=%v entries=%d", err, len(entries))

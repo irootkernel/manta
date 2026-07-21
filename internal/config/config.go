@@ -9,11 +9,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
+	"github.com/irootkernel/manta/internal/model"
+	"github.com/irootkernel/manta/internal/safety"
 )
 
-const DefaultConfigPath = ".kkachi/tester.yaml"
+const DefaultConfigPath = ".manta/tester.yaml"
 
 var knownParsers = []string{"generic", "vitest", "pytest", "go-test", "playwright"}
 
@@ -35,12 +35,12 @@ func Load(repoRoot, override string, allowMissing bool) (model.Config, string, e
 			cfg := model.Config{Version: 1, Commands: map[string]model.CommandConfig{}}
 			return cfg, path, nil
 		}
-		return model.Config{}, path, model.NewKATError(model.ExitCodeConfigError, "read config", err)
+		return model.Config{}, path, model.NewMantaError(model.ExitCodeConfigError, "read config", err)
 	}
 
 	var cfg model.Config
 	if err := safety.DecodeYAMLStrict(data, &cfg); err != nil {
-		return model.Config{}, path, model.NewKATError(model.ExitCodeConfigError, "parse config", err)
+		return model.Config{}, path, model.NewMantaError(model.ExitCodeConfigError, "parse config", err)
 	}
 	if cfg.Commands == nil {
 		cfg.Commands = map[string]model.CommandConfig{}
@@ -53,36 +53,36 @@ func Load(repoRoot, override string, allowMissing bool) (model.Config, string, e
 
 func Validate(cfg model.Config) error {
 	if cfg.Version != 1 {
-		return model.NewKATError(model.ExitCodeConfigError, "validate config", fmt.Errorf("unsupported config version %d", cfg.Version))
+		return model.NewMantaError(model.ExitCodeConfigError, "validate config", fmt.Errorf("unsupported config version %d", cfg.Version))
 	}
 	for id, cmd := range cfg.Commands {
 		if err := safety.ValidateArtifactIdentifier("command id", id); err != nil {
-			return model.NewKATError(model.ExitCodeConfigError, "validate config", err)
+			return model.NewMantaError(model.ExitCodeConfigError, "validate config", err)
 		}
 		if len(cmd.Command) == 0 {
-			return model.NewKATError(model.ExitCodeConfigError, "validate config", fmt.Errorf("command %q must define argv command", id))
+			return model.NewMantaError(model.ExitCodeConfigError, "validate config", fmt.Errorf("command %q must define argv command", id))
 		}
 		for _, part := range cmd.Command {
 			if strings.TrimSpace(part) == "" {
-				return model.NewKATError(model.ExitCodeConfigError, "validate config", fmt.Errorf("command %q contains empty argv item", id))
+				return model.NewMantaError(model.ExitCodeConfigError, "validate config", fmt.Errorf("command %q contains empty argv item", id))
 			}
 		}
 		if strings.TrimSpace(cmd.Lane) == "" {
-			return model.NewKATError(model.ExitCodeConfigError, "validate config", fmt.Errorf("command %q must define lane", id))
+			return model.NewMantaError(model.ExitCodeConfigError, "validate config", fmt.Errorf("command %q must define lane", id))
 		}
 		if err := validateParserLabel(cmd.Parser, true); err != nil {
 			return err
 		}
 		if cmd.TimeoutSec <= 0 || cmd.TimeoutSec > 86400 {
-			return model.NewKATError(model.ExitCodeConfigError, "validate config", fmt.Errorf("command %q timeout_sec must be between 1 and 86400", id))
+			return model.NewMantaError(model.ExitCodeConfigError, "validate config", fmt.Errorf("command %q timeout_sec must be between 1 and 86400", id))
 		}
 	}
 	for _, pattern := range cfg.Redaction.Patterns {
 		if strings.TrimSpace(pattern.Name) == "" {
-			return model.NewKATError(model.ExitCodeConfigError, "validate config", fmt.Errorf("redaction pattern name must not be empty"))
+			return model.NewMantaError(model.ExitCodeConfigError, "validate config", fmt.Errorf("redaction pattern name must not be empty"))
 		}
 		if _, err := regexp.Compile(pattern.Regex); err != nil {
-			return model.NewKATError(model.ExitCodeConfigError, "validate config", fmt.Errorf("redaction pattern %q invalid regex: %w", pattern.Name, err))
+			return model.NewMantaError(model.ExitCodeConfigError, "validate config", fmt.Errorf("redaction pattern %q invalid regex: %w", pattern.Name, err))
 		}
 	}
 	return nil
@@ -90,14 +90,14 @@ func Validate(cfg model.Config) error {
 
 func ValidateAdHocLane(lane string) error {
 	if strings.TrimSpace(lane) == "" {
-		return model.NewKATError(model.ExitCodeConfigError, "validate ad hoc lane", fmt.Errorf("--lane is required for ad-hoc runs"))
+		return model.NewMantaError(model.ExitCodeConfigError, "validate ad hoc lane", fmt.Errorf("--lane is required for ad-hoc runs"))
 	}
 	return nil
 }
 
 func validateParserLabel(label string, requireSupported bool) error {
 	if !slices.Contains(knownParsers, label) {
-		return model.NewKATError(model.ExitCodeConfigError, "validate parser", fmt.Errorf("unsupported parser label %q", label))
+		return model.NewMantaError(model.ExitCodeConfigError, "validate parser", fmt.Errorf("unsupported parser label %q", label))
 	}
 	_ = requireSupported
 	return nil

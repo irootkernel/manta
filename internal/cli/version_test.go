@@ -15,7 +15,7 @@ func TestVersionHumanOutput(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0", exitCode)
 	}
-	if got, want := stdout.String(), "kkachi-agent-tester v0.1.3\n"; got != want {
+	if got, want := stdout.String(), "manta v0.1.4\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if stderr.Len() != 0 {
@@ -26,7 +26,7 @@ func TestVersionHumanOutput(t *testing.T) {
 func TestVersionJSONOutput(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	info := BuildInfo{Name: "kkachi-agent-tester", Version: "1.2.3", Commit: "abc123", BuildDate: "2026-01-01T00:00:00Z"}
+	info := BuildInfo{Name: "manta", Version: "1.2.3", Commit: "abc123", BuildDate: "2026-01-01T00:00:00Z"}
 
 	exitCode := Run([]string{"version", "--json"}, &stdout, &stderr, info)
 	if exitCode != 0 {
@@ -37,7 +37,7 @@ func TestVersionJSONOutput(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
 		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout.String())
 	}
-	want := versionOutput{Name: "kkachi-agent-tester", Version: "1.2.3"}
+	want := versionOutput{Name: "manta", Version: "1.2.3"}
 	if payload != want {
 		t.Fatalf("payload = %#v, want %#v", payload, want)
 	}

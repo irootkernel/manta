@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/irootkernel/manta/internal/model"
 )
 
 func TestBinaryRejectsUnknownConfigFields(t *testing.T) {
@@ -19,7 +19,7 @@ func TestBinaryRejectsUnknownConfigFields(t *testing.T) {
 	bin := buildBinary(t, root)
 	repo := t.TempDir()
 	writeE2EConfig(t, repo, "#!/bin/sh\ntouch command-ran\n")
-	configPath := filepath.Join(repo, ".kkachi", "tester.yaml")
+	configPath := filepath.Join(repo, ".manta", "tester.yaml")
 	file, err := os.OpenFile(configPath, os.O_APPEND|os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -48,8 +48,8 @@ func TestRequirementTraceabilityMatrixCoversCompletedRequirements(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	completedPattern := regexp.MustCompile(`(?m)^- \[x\] \x60(KAT-REQ-[A-Z0-9-]+)\x60`)
-	rowPattern := regexp.MustCompile(`(?m)^\| \x60(KAT-REQ-[A-Z0-9-]+)\x60 \| ([^|]+) \|$`)
+	completedPattern := regexp.MustCompile(`(?m)^- \[x\] \x60(MANTA-REQ-[A-Z0-9-]+)\x60`)
+	rowPattern := regexp.MustCompile(`(?m)^\| \x60(MANTA-REQ-[A-Z0-9-]+)\x60 \| ([^|]+) \|$`)
 	completed := make(map[string]bool)
 	for _, match := range completedPattern.FindAllSubmatch(specData, -1) {
 		completed[string(match[1])] = true
@@ -85,7 +85,7 @@ func TestBinaryRuleTestDoesNotUseParserFallback(t *testing.T) {
 	root := projectRoot(t)
 	bin := buildBinary(t, root)
 	repo := t.TempDir()
-	rulesDir := filepath.Join(repo, ".kkachi", "tester", "rules")
+	rulesDir := filepath.Join(repo, ".manta", "tester", "rules")
 	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -146,14 +146,14 @@ func TestBinaryRejectsOversizedRuleContext(t *testing.T) {
 
 		createOut, createErr := exec.Command(bin, "--repo", repo, "rules", "create", "--file", invalidPath).CombinedOutput()
 		requireExitCode(t, createErr, int(model.ExitCodeConfigError), createOut)
-		if _, err := os.Stat(filepath.Join(repo, ".kkachi", "tester", "rules", "bounded-v1.yaml")); !os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(repo, ".manta", "tester", "rules", "bounded-v1.yaml")); !os.IsNotExist(err) {
 			t.Fatalf("invalid create wrote a rule file: %v", err)
 		}
 
 		runExpectedExit(t, exec.Command(bin, "--repo", repo, "rules", "create", "--file", validPath), 0)
 		updateOut, updateErr := exec.Command(bin, "--repo", repo, "rules", "update", "bounded-v1", "--file", invalidPath).CombinedOutput()
 		requireExitCode(t, updateErr, int(model.ExitCodeConfigError), updateOut)
-		stored, err := os.ReadFile(filepath.Join(repo, ".kkachi", "tester", "rules", "bounded-v1.yaml"))
+		stored, err := os.ReadFile(filepath.Join(repo, ".manta", "tester", "rules", "bounded-v1.yaml"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -164,7 +164,7 @@ func TestBinaryRejectsOversizedRuleContext(t *testing.T) {
 
 	t.Run("test and run reject discovered invalid rule", func(t *testing.T) {
 		repo := t.TempDir()
-		rulesDir := filepath.Join(repo, ".kkachi", "tester", "rules")
+		rulesDir := filepath.Join(repo, ".manta", "tester", "rules")
 		if err := os.MkdirAll(rulesDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -223,7 +223,7 @@ func TestBinaryPreservesConcurrentRuleProposals(t *testing.T) {
 	for err := range errs {
 		t.Errorf("proposal command failed: %v", err)
 	}
-	entries, err := os.ReadDir(filepath.Join(repo, ".kat", "rule-proposals"))
+	entries, err := os.ReadDir(filepath.Join(repo, ".manta", "rule-proposals"))
 	if err != nil {
 		t.Fatal(err)
 	}

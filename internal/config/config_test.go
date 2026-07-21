@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/irootkernel/manta/internal/model"
 )
 
 func TestValidateAcceptsImplementedParsers(t *testing.T) {

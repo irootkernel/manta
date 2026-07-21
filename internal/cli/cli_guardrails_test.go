@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/irootkernel/manta/internal/model"
 )
 
 func TestSummarizeRebuildsArtifactsFromRawLogOnly(t *testing.T) {
@@ -27,7 +27,7 @@ func TestSummarizeRebuildsArtifactsFromRawLogOnly(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("expected summarize command to succeed, got %d stderr=%s", exitCode, stderr.String())
 	}
-	runsDir := filepath.Join(repo, ".kat", "runs")
+	runsDir := filepath.Join(repo, ".manta", "runs", "standalone")
 	entries, err := os.ReadDir(runsDir)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("expected one standalone summarize directory, err=%v entries=%d", err, len(entries))

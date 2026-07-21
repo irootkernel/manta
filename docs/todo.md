@@ -1,4 +1,4 @@
-# KAT Todo
+# Manta Todo
 
 Status: No open items
 Scope: Documentation and implementation follow-up notes
@@ -13,4 +13,4 @@ Scope: Documentation and implementation follow-up notes
 
 None.
 
-Unsupported and out-of-scope v0.1 capabilities are listed in the [integration guide](integration-guide.md#not-provided-by-kat-v01). They are not implicitly planned; add an approved requirement and roadmap item before treating one as future work.
+Unsupported and out-of-scope v0.1 capabilities are listed in the [integration guide](integration-guide.md#not-provided-by-manta-v01). They are not implicitly planned; add an approved requirement and roadmap item before treating one as future work.

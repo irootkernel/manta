@@ -1,9 +1,9 @@
-# KAT Parent-Project Integration Guide
+# Manta Parent-Project Integration Guide
 
-Status: Current for `kkachi-agent-tester v0.1.3`
-Audience: Projects that invoke KAT or consume KAT evidence
+Status: Current for `manta v0.1.4`
+Audience: Projects that invoke Manta or consume Manta evidence
 
-KAT is a standalone deterministic test runner and evidence producer. A parent project owns when and why tests run; KAT owns command execution, raw-log preservation, bounded extraction, and factual artifacts for that one invocation.
+Manta is a standalone deterministic test runner and evidence producer. A parent project owns when and why tests run; Manta owns command execution, raw-log preservation, bounded extraction, and factual artifacts for that one invocation.
 
 ## Integration boundary
 
@@ -11,7 +11,7 @@ KAT is a standalone deterministic test runner and evidence producer. A parent pr
 Parent project / CI / operator
   | chooses command, version, repository, run ID, and retention policy
   v
-kkachi-agent-tester
+manta
   | executes command and records factual evidence
   v
 status.json + summary.json + summary.md + excerpts + raw.log
@@ -20,20 +20,20 @@ status.json + summary.json + summary.md + excerpts + raw.log
 Watcher / evidence consumer / human reviewer
 ```
 
-The command exit code is authoritative. Parsers and rules describe evidence quality; they cannot convert failure to pass. KAT artifacts do not grant review acceptance, waiver, final acceptance, release, or runtime-activation authority.
+The command exit code is authoritative. Parsers and rules describe evidence quality; they cannot convert failure to pass. Manta artifacts do not grant review acceptance, waiver, final acceptance, release, or runtime-activation authority.
 
 ## Supported capability matrix
 
-| Area | Supported in v0.1.3 | Integration note |
+| Area | Supported in v0.1.4 | Integration note |
 |---|---|---|
-| Configured execution | Yes | `run <command-id>` reads `.kkachi/tester.yaml`. |
+| Configured execution | Yes | `run <command-id>` reads `.manta/tester.yaml`. |
 | Ad-hoc execution | Yes | `run --lane <lane> -- <argv...>` can run without configured commands. |
 | Existing-log processing | Yes | `summarize <raw-log>` copies and summarizes a log without rerunning the command. Its inferred result is not authoritative execution metadata. |
 | Failure excerpt lookup | Yes | `excerpt --summary <path> <failure-id>` validates contained references before reading. |
 | Parsers | Yes | `generic`, `vitest`, `pytest`, `go-test`, and `playwright`. |
 | Project extraction rules | Yes | Strict YAML CRUD, provenance, fixture testing, bounded spans, and run-local proposals. |
-| Standalone artifacts | Yes | Collision-free `.kat/runs/<UTC-timestamp>[-NNN]/` or `<output-dir>/runs/...`. |
-| Parent run artifacts | Yes | `--run-id <id>` writes only under `.kkachi/runs/<id>/artifacts/test/`. |
+| Standalone artifacts | Yes | Collision-free `.manta/runs/standalone/<UTC-timestamp>[-NNN]/` or `<output-dir>/runs/...`. |
+| Parent run artifacts | Yes | `--run-id <id>` writes only under `.manta/runs/scoped/<id>/artifacts/test/`. |
 | Human output | Yes | Compact console output, Markdown summary, and bounded excerpts. |
 | Machine output | Yes | `--json`, summary JSON, and deterministic status JSON. |
 | Redacted derived evidence | Yes | Configured redaction covers surfaced metadata, summaries, status, warnings, failures, and excerpts. |
@@ -42,17 +42,17 @@ The command exit code is authoritative. Parsers and rules describe evidence qual
 | Operator interruption | Yes | Unix SIGINT/SIGTERM process-group behavior is covered by built-binary tests; non-Unix builds signal the direct child and have a narrower guarantee. |
 | Deterministic binary selection | Yes | The bundled Python 3 resolver selects an explicit environment, metadata, or versioned toolchain binary and never falls back to `PATH`. |
 
-## Not provided by KAT v0.1
+## Not provided by Manta v0.1
 
 These are current boundaries, not hidden partial features:
 
 - Test planning, test generation, code review, or acceptance decisions.
 - External orchestration, workflow/session management, or acceptance-state management.
-- A resident watcher daemon, running-state heartbeat, or progress events. KAT writes final `status.json`; the parent project owns in-flight state, polling, and notification.
+- A resident watcher daemon, running-state heartbeat, or progress events. Manta writes final `status.json`; the parent project owns in-flight state, polling, and notification.
 - Automatic issue creation, release, push, install, update, or runtime activation.
 - Automatic generic-parser fallback after a specialized parser misses.
 - Redaction of the original raw log or of literal artifact-reference paths.
-- Automatic promotion of `.kat/rule-proposals/` into active project rules.
+- Automatic promotion of `.manta/rule-proposals/` into active project rules.
 - Consumer-specific evidence snapshots. Consumers should use or normalize the existing status, summary, and raw-log references.
 - A bundled CI-provider workflow or a cross-platform release matrix. The repository tests platform-neutral behavior plus additional Unix-only install, process-group, and signal behavior.
 - A successful built-in `--help` surface. The current CLI returns config exit code `2` for `--help`; use the [CLI reference](user-interface.md) for command syntax.
@@ -64,54 +64,54 @@ No open implementation items are currently recorded in `todo.md`. The boundaries
 Commit these when used:
 
 ```text
-.kkachi/tester.yaml
-.kkachi/tester/rules/*.yaml
+.manta/tester.yaml
+.manta/tester/rules/*.yaml
 ```
 
 Keep runtime evidence out of ordinary source commits unless the parent project has an explicit evidence-retention requirement:
 
 ```gitignore
-.kat/
-.kkachi/runs/
+.manta/runs/
+.manta/rule-proposals/
 ```
 
-Treat `.kkachi/toolchain.yaml` as local/generated state unless the parent project explicitly owns a portable toolchain policy. Never commit an absolute `kat.binary_path` that is meaningful only on one machine.
+Treat `.manta/toolchain.yaml` as local/generated state unless the parent project explicitly owns a portable toolchain policy. Never commit an absolute `manta.binary_path` that is meaningful only on one machine.
 
 ## 1. Select and verify the binary
 
 For ordinary local use, install and verify the pinned release:
 
 ```bash
-go install github.com/SeventeenthEarth/kkachi-agent-tester@v0.1.3
-kkachi-agent-tester --version
+go install github.com/irootkernel/manta@v0.1.4
+manta --version
 ```
 
 For deterministic automation, prefer the bundled resolver and one explicit source:
 
-1. `KKACHI_KAT_BIN=/absolute/path/to/kkachi-agent-tester`
-2. `.kkachi/toolchain.yaml` `kat.binary_path`
-3. `.kkachi/toolchain.yaml` `kat.cli_version`, resolved under `${KKACHI_TOOLCHAIN_ROOT:-$HOME/.local/kkachi/toolchains}`
+1. `MANTA_BIN=/absolute/path/to/manta`
+2. `.manta/toolchain.yaml` `manta.binary_path`
+3. `.manta/toolchain.yaml` `manta.cli_version`, resolved under `${MANTA_TOOLCHAIN_ROOT:-$HOME/.local/manta/toolchains}`
 
 Example portable version selection:
 
 ```yaml
-schema_version: "kkachi.toolchain.v1"
-kat:
-  cli_version: "0.1.3"
+schema_version: "manta.toolchain.v1"
+manta:
+  cli_version: "0.1.4"
 ```
 
-Validate selection before invoking KAT:
+Validate selection before invoking Manta:
 
 ```bash
-scripts/kkachi-agent-tester-toolchain --toolchain-status
-scripts/kkachi-agent-tester-toolchain --version
+scripts/manta-toolchain --toolchain-status
+scripts/manta-toolchain --version
 ```
 
 The resolver requires Python 3, absolute executable overrides, and an exact semantic-version match for metadata-selected binaries. It deliberately does not search `PATH`.
 
 ## 2. Define project commands
 
-Create `.kkachi/tester.yaml`:
+Create `.manta/tester.yaml`:
 
 ```yaml
 version: 1
@@ -148,37 +148,37 @@ Integration rules:
 Use standalone mode for local or independent automation:
 
 ```bash
-kkachi-agent-tester run unit
+manta run unit
 ```
 
 Use a parent-owned run ID when evidence must attach to an existing parent run:
 
 ```bash
 run_id=parent-run-001
-kkachi-agent-tester --run-id "$run_id" run unit
+manta --run-id "$run_id" run unit
 ```
 
-The parent must create a safe identifier before invocation; KAT validates it and creates the artifact directory. Do not derive run IDs from secrets or untrusted path fragments. Standalone mode allocates a new directory for every operation, but `--run-id` uses fixed filenames: invoking the same command ID again under the same run ID replaces that command's prior artifacts. The parent owns run/command uniqueness and retry retention.
+The parent must create a safe identifier before invocation; Manta validates it and creates the artifact directory. Do not derive run IDs from secrets or untrusted path fragments. Standalone mode allocates a new directory for every operation, but `--run-id` uses fixed filenames: invoking the same command ID again under the same run ID replaces that command's prior artifacts. The parent owns run/command uniqueness and retry retention.
 
 Use compact JSON on stdout when the caller needs returned artifact paths:
 
 ```bash
 run_id=parent-run-001
-kkachi-agent-tester --json --run-id "$run_id" run unit
+manta --json --run-id "$run_id" run unit
 ```
 
-The KAT process exits with the test command's non-zero code when available. Callers must capture output and artifact paths without treating every non-zero KAT process as an infrastructure failure.
+The Manta process exits with the test command's non-zero code when available. Callers must capture output and artifact paths without treating every non-zero Manta process as an infrastructure failure.
 
 ## 4. Consume artifacts by purpose
 
 With `--run-id`, artifacts are written under:
 
 ```text
-.kkachi/runs/<run_id>/artifacts/test/<command-id>.status.json
-.kkachi/runs/<run_id>/artifacts/test/<command-id>.summary.json
-.kkachi/runs/<run_id>/artifacts/test/<command-id>.summary.md
-.kkachi/runs/<run_id>/artifacts/test/<command-id>.raw.log
-.kkachi/runs/<run_id>/artifacts/test/excerpts/<failure-id>.log
+.manta/runs/scoped/<run_id>/artifacts/test/<command-id>.status.json
+.manta/runs/scoped/<run_id>/artifacts/test/<command-id>.summary.json
+.manta/runs/scoped/<run_id>/artifacts/test/<command-id>.summary.md
+.manta/runs/scoped/<run_id>/artifacts/test/<command-id>.raw.log
+.manta/runs/scoped/<run_id>/artifacts/test/excerpts/<failure-id>.log
 ```
 
 Consume them in this order:
@@ -204,14 +204,14 @@ Important cases:
 
 - A failed, timed-out, or killed command stays non-pass even if extraction is `degraded`.
 - A specialized-parser miss after a passing command is `passed` plus `no_match`.
-- An extraction internal error after a passing command leaves artifact `exit_code: 0`, sets artifact `status: internal_error`, and makes KAT exit `4`.
+- An extraction internal error after a passing command leaves artifact `exit_code: 0`, sets artifact `status: internal_error`, and makes Manta exit `4`.
 - `summarize` has no authoritative process result; inferred status is evidence interpretation only.
 
 See the [architecture extraction policy](architecture.md#failure-and-degraded-extraction-policy) for the full state table.
 
 ## 6. Poll without an agent
 
-`status.json` is the stable watcher boundary. KAT materializes it after command execution and extraction finish; it does not write a `running` state or heartbeat. Until the file appears, the parent must distinguish “still running” from “invocation failed before artifact materialization” using its own process state.
+`status.json` is the stable watcher boundary. Manta materializes it after command execution and extraction finish; it does not write a `running` state or heartbeat. Until the file appears, the parent must distinguish “still running” from “invocation failed before artifact materialization” using its own process state.
 
 A watcher that suppresses duplicate notifications must hash exactly this ordered input set:
 
@@ -225,25 +225,25 @@ A watcher that suppresses duplicate notifications must hash exactly this ordered
 8. `summary_path`
 9. `raw_log_path`
 
-KAT also writes `status_hash` from these final, redacted surfaced values. A parent watcher owns polling frequency, notification policy, retries, retention, and any transition into an external state store.
+Manta also writes `status_hash` from these final, redacted surfaced values. A parent watcher owns polling frequency, notification policy, retries, retention, and any transition into an external state store.
 
 ## 7. Integrate another evidence consumer
 
-Treat KAT output as factual test evidence only. A consumer should:
+Treat Manta output as factual test evidence only. A consumer should:
 
 - preserve the command result and `extractor_status` independently;
 - preserve resolvable status, summary, and raw-log references;
 - normalize references on the consumer side when its schema differs;
-- not infer review, waiver, final, or acceptance state from KAT artifacts.
+- not infer review, waiver, final, or acceptance state from Manta artifacts.
 
-KAT remains standalone and imposes no evidence-consumer runtime dependency.
+Manta remains standalone and imposes no evidence-consumer runtime dependency.
 
 ## Rollout checklist
 
-- [ ] Pin and verify one KAT version.
-- [ ] Commit `.kkachi/tester.yaml` and any reviewed active rules.
-- [ ] Ignore `.kat/` and `.kkachi/runs/` or define an explicit retention policy.
-- [ ] Exercise one passing and one failing command through KAT.
+- [ ] Pin and verify one Manta version.
+- [ ] Commit `.manta/tester.yaml` and any reviewed active rules.
+- [ ] Ignore `.manta/runs/` and `.manta/rule-proposals/` or define an explicit retention policy.
+- [ ] Exercise one passing and one failing command through Manta.
 - [ ] Exercise timeout handling for at least one long-running command.
 - [ ] Confirm the selected parser recognizes the parent project's real logs; treat `degraded` as a rule/parser improvement signal.
 - [ ] Confirm redaction in summary, status, excerpts, and console output using representative secrets.
@@ -255,6 +255,6 @@ KAT remains standalone and imposes no evidence-consumer runtime dependency.
 
 ## Compatibility and upgrades
 
-Pin KAT by semantic version and run the parent project's passing/failing integration fixtures before upgrading. Changes to config, status/summary fields, exit semantics, parser behavior, redaction boundaries, or artifact layouts require synchronized updates to requirements, architecture, user documentation, and executable contract tests in this repository.
+Pin Manta by semantic version and run the parent project's passing/failing integration fixtures before upgrading. Changes to config, status/summary fields, exit semantics, parser behavior, redaction boundaries, or artifact layouts require synchronized updates to requirements, architecture, user documentation, and executable contract tests in this repository.
 
 For exact CLI syntax and a complete tested rule fixture, see the [CLI reference](user-interface.md). For JSON shapes and path-safety semantics, see the [architecture](architecture.md).

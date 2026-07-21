@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/artifacts"
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
+	"github.com/irootkernel/manta/internal/artifacts"
+	"github.com/irootkernel/manta/internal/model"
+	"github.com/irootkernel/manta/internal/safety"
 )
 
 func TestMaterializeArtifactsExtractionErrorRetainsNonPassRunState(t *testing.T) {
@@ -78,7 +78,7 @@ func TestMaterializeArtifactsExtractionErrorRetainsNonPassRunState(t *testing.T)
 func TestRunInternalErrorAfterPassedCommandMaterializesArtifacts(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repo, ".kkachi"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, ".manta"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	configText := strings.Join([]string{
@@ -90,7 +90,7 @@ func TestRunInternalErrorAfterPassedCommandMaterializesArtifacts(t *testing.T) {
 		"    parser: generic",
 		"    timeout_sec: 10",
 	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(configText), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	raw := []byte(strings.Repeat("x", safety.MaxRegexInputBytes+1))
@@ -105,7 +105,7 @@ func TestRunInternalErrorAfterPassedCommandMaterializesArtifacts(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	exitCode := Main([]string{"--repo", repo, "--run-id", "passed-internal-error", "--json", "run", "huge-pass"}, &stdout, &stderr)
 	if exitCode != int(model.ExitCodeParserError) {
-		t.Fatalf("expected KAT parser exit %d, got %d stderr=%s", model.ExitCodeParserError, exitCode, stderr.String())
+		t.Fatalf("expected Manta parser exit %d, got %d stderr=%s", model.ExitCodeParserError, exitCode, stderr.String())
 	}
 	var result runResult
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
@@ -127,7 +127,7 @@ func TestRunInternalErrorAfterPassedCommandMaterializesArtifacts(t *testing.T) {
 		t.Fatalf("expected extraction diagnostic on stderr, got %q", stderr.String())
 	}
 
-	baseDir := filepath.Join(repo, ".kkachi", "runs", "passed-internal-error", "artifacts", "test")
+	baseDir := filepath.Join(repo, ".manta", "runs", "scoped", "passed-internal-error", "artifacts", "test")
 	assertExtractionErrorArtifacts(t, baseDir, "huge-pass", model.RunStatusInternalErr, 0)
 }
 
@@ -169,7 +169,7 @@ func TestSummarizeInternalErrorMaterializesArtifacts(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			exitCode := Main([]string{"--repo", repo, "--run-id", "summarize-internal-error-" + tt.name, "summarize", rawPath}, &stdout, &stderr)
 			if exitCode != int(model.ExitCodeParserError) {
-				t.Fatalf("expected KAT parser exit %d, got %d stderr=%s", model.ExitCodeParserError, exitCode, stderr.String())
+				t.Fatalf("expected Manta parser exit %d, got %d stderr=%s", model.ExitCodeParserError, exitCode, stderr.String())
 			}
 			if !strings.Contains(stdout.String(), "Status: internal_error") || !strings.Contains(stdout.String(), "Exit code: 4") {
 				t.Fatalf("expected summarized internal-error result with exit 4, got %q", stdout.String())
@@ -178,7 +178,7 @@ func TestSummarizeInternalErrorMaterializesArtifacts(t *testing.T) {
 				t.Fatalf("expected extraction diagnostic on stderr, got %q", stderr.String())
 			}
 
-			baseDir := filepath.Join(repo, ".kkachi", "runs", "summarize-internal-error-"+tt.name, "artifacts", "test")
+			baseDir := filepath.Join(repo, ".manta", "runs", "scoped", "summarize-internal-error-"+tt.name, "artifacts", "test")
 			copiedRaw := assertExtractionErrorArtifacts(t, baseDir, "unit", model.RunStatusInternalErr, int(model.ExitCodeParserError))
 			if !bytes.Equal(copiedRaw, tt.raw) {
 				t.Fatal("expected summarize to preserve the original raw bytes")

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/artifacts"
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
+	"github.com/irootkernel/manta/internal/artifacts"
+	"github.com/irootkernel/manta/internal/model"
+	"github.com/irootkernel/manta/internal/safety"
 )
 
 type binaryRunResult struct {
@@ -36,7 +36,7 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 	root := projectRoot(t)
 	bin := buildBinary(t, root)
 	repo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repo, ".kkachi", "tester"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, ".manta", "tester"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	configText := strings.Join([]string{
@@ -56,7 +56,7 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 		"      regex: 'secret_[a-z_]+'",
 		"      replace: '<redacted>'",
 	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(configText), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	script := "#!/bin/sh\nprintf '%s\\n' \"$1\"\necho 'warning: secret_warning'\necho 'TypeError: token=secret secret_failure failed'\necho 'src/secret_path/foo.test.ts:42:13'\necho '✗ secret_test'\nexit 1\n"
@@ -77,14 +77,14 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 	if exitErr.ExitCode() != 1 {
 		t.Fatalf("expected underlying exit code 1, got %d output=%s", exitErr.ExitCode(), string(runOut))
 	}
-	if !strings.Contains(string(runOut), "Command: command_<redacted>") || !strings.Contains(string(runOut), "Summary: .kat/runs/") {
+	if !strings.Contains(string(runOut), "Command: command_<redacted>") || !strings.Contains(string(runOut), "Summary: .manta/runs/standalone/") {
 		t.Fatalf("expected run output to report artifact paths, got %q", string(runOut))
 	}
 	if !strings.Contains(string(runOut), "command_secret_id.summary.md") {
 		t.Fatalf("expected run output to retain literal artifact reference, got %q", string(runOut))
 	}
 
-	runsDir := filepath.Join(repo, ".kat", "runs")
+	runsDir := filepath.Join(repo, ".manta", "runs", "standalone")
 	entries, err := os.ReadDir(runsDir)
 	if err != nil {
 		t.Fatal(err)
@@ -176,7 +176,7 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected summarize command to succeed, err=%v output=%s", err, string(summarizeOut))
 	}
-	if !strings.Contains(string(summarizeOut), "Command: command_<redacted>") || !strings.Contains(string(summarizeOut), "Summary: .kat/runs/") {
+	if !strings.Contains(string(summarizeOut), "Command: command_<redacted>") || !strings.Contains(string(summarizeOut), "Summary: .manta/runs/standalone/") {
 		t.Fatalf("expected summarize output to report artifact paths, got %q", string(summarizeOut))
 	}
 	entries, err = os.ReadDir(runsDir)
@@ -228,7 +228,7 @@ func TestBinaryJSONRedactsCommandMetadata(t *testing.T) {
 	root := projectRoot(t)
 	bin := buildBinary(t, root)
 	repo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repo, ".kkachi"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, ".manta"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	configText := strings.Join([]string{
@@ -245,7 +245,7 @@ func TestBinaryJSONRedactsCommandMetadata(t *testing.T) {
 		"      regex: 'secret_[a-z_]+'",
 		"      replace: '<redacted>'",
 	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(configText), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(repo, "test.sh"), []byte("#!/bin/sh\nprintf '%s\\n' \"$1\"\n"), 0o755); err != nil {
@@ -418,7 +418,7 @@ func TestBinaryArtifactContainment(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected successful run-scoped execution, err=%v output=%s", err, out)
 		}
-		base := filepath.Join(repo, ".kkachi", "runs", "run-001", "artifacts", "test")
+		base := filepath.Join(repo, ".manta", "runs", "scoped", "run-001", "artifacts", "test")
 		for _, name := range []string{"unit.raw.log", "unit.summary.json", "unit.summary.md", "unit.status.json"} {
 			if _, err := os.Stat(filepath.Join(base, name)); err != nil {
 				t.Fatalf("expected %s in run-scoped layout: %v", name, err)
@@ -434,8 +434,8 @@ func TestBinaryArtifactContainment(t *testing.T) {
 		runsDir string
 		runID   string
 	}{
-		{name: "standalone runs", runsDir: filepath.Join(".kat", "runs")},
-		{name: "run-id artifacts", runsDir: filepath.Join(".kkachi", "runs"), runID: "run-001"},
+		{name: "standalone runs", runsDir: filepath.Join(".manta", "runs", "standalone")},
+		{name: "run-id artifacts", runsDir: filepath.Join(".manta", "runs", "scoped"), runID: "run-001"},
 	} {
 		t.Run(test.name+" symlink escape is rejected", func(t *testing.T) {
 			repo := t.TempDir()
@@ -480,8 +480,8 @@ func TestBinaryArtifactContainment(t *testing.T) {
 	} {
 		t.Run(test.name+" is rejected", func(t *testing.T) {
 			repo := t.TempDir()
-			runA := filepath.Join(repo, ".kkachi", "runs", "run-a", "artifacts", "test")
-			runB := filepath.Join(repo, ".kkachi", "runs", "run-b", "artifacts", "test")
+			runA := filepath.Join(repo, ".manta", "runs", "scoped", "run-a", "artifacts", "test")
+			runB := filepath.Join(repo, ".manta", "runs", "scoped", "run-b", "artifacts", "test")
 			if err := os.MkdirAll(filepath.Join(runA, "excerpts"), 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -516,7 +516,7 @@ func writeE2EConfig(t *testing.T, repo, script string) {
 
 func writeE2EConfigWithParser(t *testing.T, repo, parser, script string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Join(repo, ".kkachi"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, ".manta"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	configText := strings.Join([]string{
@@ -528,7 +528,7 @@ func writeE2EConfigWithParser(t *testing.T, repo, parser, script string) {
 		"    parser: " + parser,
 		"    timeout_sec: 10",
 	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(repo, ".kkachi", "tester.yaml"), []byte(configText), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(configText), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(repo, "test.sh"), []byte(script), 0o755); err != nil {
@@ -708,8 +708,8 @@ func requireExitCode(t *testing.T, err error, expected int, output []byte) {
 
 func buildBinary(t *testing.T, root string) string {
 	t.Helper()
-	bin := filepath.Join(t.TempDir(), "kkachi-agent-tester")
-	cmd := exec.Command("go", "build", "-o", bin, "./cmd/kkachi-agent-tester")
+	bin := filepath.Join(t.TempDir(), "manta")
+	cmd := exec.Command("go", "build", "-o", bin, "./cmd/manta")
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	if err != nil {

@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
+	"github.com/irootkernel/manta/internal/model"
+	"github.com/irootkernel/manta/internal/safety"
 )
 
 var knownRuleParsers = map[string]bool{
@@ -27,7 +27,7 @@ func Discover(repoRoot string) ([]string, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
 		}
-		return nil, model.NewKATError(model.ExitCodeConfigError, "discover rule files", err)
+		return nil, model.NewMantaError(model.ExitCodeConfigError, "discover rule files", err)
 	}
 	matches := make([]string, 0, len(entries))
 	for _, entry := range entries {
@@ -68,35 +68,35 @@ func isApplicable(rule model.Rule, lane, parser string) bool {
 
 func ValidateApplicable(rule model.Rule) error {
 	if err := safety.ValidateArtifactIdentifier("rule id", rule.ID); err != nil {
-		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("%w (%s)", err, rule.SourcePath))
+		return model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("%w (%s)", err, rule.SourcePath))
 	}
 	if rule.Status != model.RuleStatusActive && rule.Status != model.RuleStatusDisabled {
-		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q has invalid status %q", rule.ID, rule.Status))
+		return model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q has invalid status %q", rule.ID, rule.Status))
 	}
 	if strings.TrimSpace(rule.Parser) == "" {
-		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q must define parser", rule.ID))
+		return model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q must define parser", rule.ID))
 	}
 	if !knownRuleParsers[rule.Parser] {
-		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q has unsupported parser label %q", rule.ID, rule.Parser))
+		return model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q has unsupported parser label %q", rule.ID, rule.Parser))
 	}
 	if strings.TrimSpace(rule.Lane) == "" {
-		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q must define lane", rule.ID))
+		return model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q must define lane", rule.ID))
 	}
 	if strings.TrimSpace(rule.Match.Start.Regex) == "" {
-		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q must define start regex", rule.ID))
+		return model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q must define start regex", rule.ID))
 	}
 	if rule.Match.End.MaxBlockLines <= 0 || rule.Match.End.MaxBlockLines > safety.MaxBlockLines {
-		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q max_block_lines must be between 1 and %d", rule.ID, safety.MaxBlockLines))
+		return model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q max_block_lines must be between 1 and %d", rule.ID, safety.MaxBlockLines))
 	}
 	if rule.Match.IncludeContext.Before < 0 || rule.Match.IncludeContext.After < 0 {
-		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q include_context before and after must be non-negative", rule.ID))
+		return model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q include_context before and after must be non-negative", rule.ID))
 	}
 	if rule.Match.IncludeContext.Before > safety.MaxBlockLines || rule.Match.IncludeContext.After > safety.MaxBlockLines {
-		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q include_context before and after must not exceed %d", rule.ID, safety.MaxBlockLines))
+		return model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q include_context before and after must not exceed %d", rule.ID, safety.MaxBlockLines))
 	}
 	spanBudget := rule.Match.IncludeContext.Before + rule.Match.End.MaxBlockLines + rule.Match.IncludeContext.After
 	if spanBudget > safety.MaxBlockLines {
-		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q total block and context must not exceed %d lines", rule.ID, safety.MaxBlockLines))
+		return model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q total block and context must not exceed %d lines", rule.ID, safety.MaxBlockLines))
 	}
 	if _, err := validateRegex(rule.Match.Start.Regex, rule.ID, "start"); err != nil {
 		return err
@@ -112,7 +112,7 @@ func ValidateApplicable(rule model.Rule) error {
 			return err
 		}
 		if !hasNamedGroup(re, "file") || !hasNamedGroup(re, "line") {
-			return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q extract.file_line must define named capture groups file and line", rule.ID))
+			return model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q extract.file_line must define named capture groups file and line", rule.ID))
 		}
 	}
 	if rule.Extract.TestName.Regex != "" {
@@ -121,7 +121,7 @@ func ValidateApplicable(rule model.Rule) error {
 			return err
 		}
 		if re.NumSubexp() < 1 {
-			return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q extract.test_name must define at least one capture group", rule.ID))
+			return model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q extract.test_name must define at least one capture group", rule.ID))
 		}
 	}
 	return nil
@@ -129,11 +129,11 @@ func ValidateApplicable(rule model.Rule) error {
 
 func validateRegex(expr, ruleID, field string) (*regexp.Regexp, error) {
 	if err := safety.ValidateRegex(expr); err != nil {
-		return nil, model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q %s invalid regex: %w", ruleID, field, err))
+		return nil, model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q %s invalid regex: %w", ruleID, field, err))
 	}
 	re, err := regexp.Compile(expr)
 	if err != nil {
-		return nil, model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q %s invalid regex: %w", ruleID, field, err))
+		return nil, model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q %s invalid regex: %w", ruleID, field, err))
 	}
 	return re, nil
 }

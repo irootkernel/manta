@@ -3,7 +3,7 @@ package safety
 import (
 	"testing"
 
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/irootkernel/manta/internal/model"
 )
 
 func TestRedactorUsesConfiguredOrder(t *testing.T) {

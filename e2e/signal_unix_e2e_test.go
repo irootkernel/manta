@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/artifacts"
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/irootkernel/manta/internal/artifacts"
+	"github.com/irootkernel/manta/internal/model"
 )
 
 func TestBinaryPreservesInterruptedEvidence(t *testing.T) {
@@ -104,11 +104,11 @@ func TestBinaryPreservesInterruptedEvidence(t *testing.T) {
 func waitForInterruptedRaw(t *testing.T, repo, runID string) string {
 	t.Helper()
 	if runID != "" {
-		path := filepath.Join(repo, ".kkachi", "runs", runID, "artifacts", "test", "unit.raw.log")
+		path := filepath.Join(repo, ".manta", "runs", "scoped", runID, "artifacts", "test", "unit.raw.log")
 		waitForPath(t, path)
 		return path
 	}
-	pattern := filepath.Join(repo, ".kat", "runs", "*", "unit.raw.log")
+	pattern := filepath.Join(repo, ".manta", "runs", "standalone", "*", "unit.raw.log")
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		matches, err := filepath.Glob(pattern)

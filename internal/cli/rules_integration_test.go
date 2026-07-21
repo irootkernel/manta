@@ -104,7 +104,7 @@ func TestRulesLifecycleCommands(t *testing.T) {
 	if exitCode != 0 || !strings.Contains(stdout.String(), "Proposed rule:") {
 		t.Fatalf("expected rules propose to succeed, exit=%d stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
 	}
-	proposalEntries, err := os.ReadDir(filepath.Join(repo, ".kat", "rule-proposals"))
+	proposalEntries, err := os.ReadDir(filepath.Join(repo, ".manta", "rule-proposals"))
 	if err != nil || len(proposalEntries) != 1 {
 		t.Fatalf("expected one proposal file, err=%v entries=%d", err, len(proposalEntries))
 	}

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/irootkernel/manta/internal/model"
 )
 
 func TestExecuteTimeout(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/irootkernel/manta/internal/model"
 )
 
 const (
@@ -26,7 +26,7 @@ type Redactor struct {
 
 func ValidateRegex(regex string) error {
 	if _, err := regexp.Compile(regex); err != nil {
-		return model.NewKATError(model.ExitCodeConfigError, "validate regex", err)
+		return model.NewMantaError(model.ExitCodeConfigError, "validate regex", err)
 	}
 	return nil
 }
@@ -50,7 +50,7 @@ func NewRedactor(patterns []model.RedactionPattern) (Redactor, error) {
 	for _, pattern := range patterns {
 		re, err := regexp.Compile(pattern.Regex)
 		if err != nil {
-			return Redactor{}, model.NewKATError(model.ExitCodeConfigError, "validate regex", err)
+			return Redactor{}, model.NewMantaError(model.ExitCodeConfigError, "validate regex", err)
 		}
 		redactor.rules = append(redactor.rules, redactionRule{re: re, replacement: pattern.Replace})
 	}
@@ -88,7 +88,7 @@ func FilterNoise(text string, filters []string) string {
 
 func EnsureInputWithinLimit(text string) error {
 	if len(text) > MaxRegexInputBytes {
-		return model.NewKATError(model.ExitCodeParserError, "regex input bound", fmt.Errorf("input exceeds %d bytes", MaxRegexInputBytes))
+		return model.NewMantaError(model.ExitCodeParserError, "regex input bound", fmt.Errorf("input exceeds %d bytes", MaxRegexInputBytes))
 	}
 	return nil
 }

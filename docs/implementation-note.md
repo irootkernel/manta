@@ -1,13 +1,13 @@
-# KAT Implementation Note
+# Manta Implementation Note
 
 Status: v0.1 baseline complete; HARDE hardening complete (`HARDE-001` through `HARDE-007` complete)
-Scope: Maintainer guidance for the standalone KAT v0.1 implementation and future changes
+Scope: Maintainer guidance for the standalone Manta v0.1 implementation and future changes
 
 This document explains implementation constraints and verification expectations for contributors. It is not the parent-project adoption contract; integrators should start with the [integration guide](integration-guide.md).
 
 ## Implementation posture
 
-Build KAT as a small deterministic Go CLI first. Do not add orchestration, session, or acceptance-authority concepts to the core package. Treat the optional run-scoped artifact layout as output path compatibility only.
+Build Manta as a small deterministic Go CLI first. Do not add orchestration, session, or acceptance-authority concepts to the core package. Treat the optional run-scoped artifact layout as output path compatibility only.
 
 The post-baseline HARDE sequence is complete. Preserve the contracts in `roadmap.md#harde-post-baseline-hardening-and-contract-closure` and `requirements-specs.md#rqhar-post-baseline-hardening-and-contract-closure`, and rerun affected roadmap verification for future changes.
 
@@ -16,7 +16,7 @@ The post-baseline HARDE sequence is complete. Preserve the contracts in `roadmap
 Names are illustrative; adapt them to the selected language and layout.
 
 ```text
-cmd/kkachi-agent-tester/
+cmd/manta/
   entrypoint and argument parsing
 internal/config/
   config discovery, schema validation, redaction/noise config
@@ -90,7 +90,7 @@ Extractor status guidance:
 - `degraded`: a failed, timed-out, or killed command has no accepted failure span, or extraction failed internally.
 - `no_match`: a passing command has no accepted failure span and extraction completed without an internal error; warnings may still be present.
 
-Extraction internal errors follow the artifact/CLI matrix in `architecture.md`. When artifact writes remain safe, KAT preserves raw evidence and materializes empty degraded evidence; bounded, redacted diagnostics go to stderr rather than the JSON schemas.
+Extraction internal errors follow the artifact/CLI matrix in `architecture.md`. When artifact writes remain safe, Manta preserves raw evidence and materializes empty degraded evidence; bounded, redacted diagnostics go to stderr rather than the JSON schemas.
 
 ## Fixture-backed parser examples
 
@@ -178,7 +178,7 @@ Tests should cover:
 - Rule test with expected span.
 - Rule overmatch rejection.
 - Extreme rule context values failing closed before command execution, plus defensive extraction bounds that prevent overflow or panic for unvalidated in-memory rules.
-- Artifact path generation for `.kat/`, caller-selected `--output-dir`, and `.kkachi/runs/<run_id>/...` layouts, plus built-binary rejection of external `.kat/runs` and `.kkachi/runs` symlinks before command execution.
+- Artifact path generation for `.manta/`, caller-selected `--output-dir`, and `.manta/runs/scoped/<run_id>/...` layouts, plus built-binary rejection of external `.manta/runs/standalone` and `.manta/runs/scoped` symlinks before command execution.
 - Sequential, goroutine-concurrent, and cross-process standalone directory allocation within one UTC-second interval, including configured, ad-hoc, and summarize evidence preservation.
 - Invalid run, command, rule, and failure IDs failing before command execution or artifact writes.
 - Traversal, cross-run excerpt access, dangling links, and external symlink escape failing closed across artifact and rule operations.
@@ -189,13 +189,13 @@ Tests should cover:
 - Exact generated Markdown shape for a fixed summary, plus a built-binary fresh-fixture workflow covering version, configured/ad-hoc run, summarize, excerpt, JSON output, and the complete rule lifecycle.
 - Unsupported historical `--verbose` and `--no-color` placeholders failing closed with config exit code `2`.
 - Actual `make install` and `make install-toolchain` execution in isolated temporary roots, including installed-version and resolver checks.
-- Toolchain resolver selection from `KKACHI_KAT_BIN`, absolute `kat.binary_path`, and versioned `kat.cli_version`, including argument forwarding and fail-closed missing, unsafe, or mismatched selections.
+- Toolchain resolver selection from `MANTA_BIN`, absolute `manta.binary_path`, and versioned `manta.cli_version`, including argument forwarding and fail-closed missing, unsafe, or mismatched selections.
 
 ## Release-readiness checklist
 
 Before the next release tag, verify all of the following:
 
-- `go build ./cmd/kkachi-agent-tester`
+- `go build ./cmd/manta`
 - `make test`
 - `make install` and `make install-toolchain` in isolated temporary roots, including installed-version and resolver checks
 - configured run smoke test
@@ -204,9 +204,9 @@ Before the next release tag, verify all of the following:
 - summarize smoke test from an existing raw log
 - parser fixture coverage for `generic`, `vitest`, `pytest`, `go-test`, and `playwright`
 - rule lifecycle coverage for `list/search/show/create/update/delete/test/propose`
-- fresh-fixture execution of every documented KAT CLI command with generated Markdown compared to the documented shape
+- fresh-fixture execution of every documented Manta CLI command with generated Markdown compared to the documented shape
 - toolchain resolver status and forwarding checks for environment, absolute-path metadata, and versioned metadata selection
-- artifact path and containment verification for `.kat/`, `--output-dir`, and `.kkachi/runs/<run_id>/...`, including external `.kat/runs` and `.kkachi/runs` symlink rejection
+- artifact path and containment verification for `.manta/`, `--output-dir`, and `.manta/runs/scoped/<run_id>/...`, including external `.manta/runs/standalone` and `.manta/runs/scoped` symlink rejection
 - collision checks confirming repeated standalone operations retain distinct raw, summary, Markdown, status, and excerpt artifacts with unchanged raw-log checksums
 - watcher status JSON compatibility, including status-hash inputs
 - release notes mention known limitations, especially raw-log redaction policy, rule proposals remaining run-local until promoted, and the current platform-verification boundary

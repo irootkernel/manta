@@ -3,16 +3,16 @@ package cli
 import "testing"
 
 func TestNewBuildInfoPreservesExplicitReleaseMetadata(t *testing.T) {
-	info := NewBuildInfo("kkachi-agent-tester", "1.2.3", "abc123", "2026-01-01T00:00:00Z")
+	info := NewBuildInfo("manta", "1.2.3", "abc123", "2026-01-01T00:00:00Z")
 
-	want := BuildInfo{Name: "kkachi-agent-tester", Version: "1.2.3", Commit: "abc123", BuildDate: "2026-01-01T00:00:00Z"}
+	want := BuildInfo{Name: "manta", Version: "1.2.3", Commit: "abc123", BuildDate: "2026-01-01T00:00:00Z"}
 	if info != want {
 		t.Fatalf("info = %#v, want %#v", info, want)
 	}
 }
 
 func TestNewBuildInfoNormalizesGoModuleVersionPrefix(t *testing.T) {
-	info := NewBuildInfo("kkachi-agent-tester", "v1.2.3", "abc123", "2026-01-01T00:00:00Z")
+	info := NewBuildInfo("manta", "v1.2.3", "abc123", "2026-01-01T00:00:00Z")
 
 	if info.Version != "1.2.3" {
 		t.Fatalf("Version = %q, want 1.2.3", info.Version)

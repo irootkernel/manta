@@ -1,14 +1,14 @@
 # AGENTS.md
 
-Guidance for coding agents working in `kkachi-agent-tester` local development.
+Guidance for coding agents working in `manta` local development.
 
-KAT is a standalone deterministic Go CLI for running test commands, preserving raw logs, extracting bounded failure evidence, and writing compact summary/status artifacts.
+Manta is a standalone deterministic Go CLI for running test commands, preserving raw logs, extracting bounded failure evidence, and writing compact summary/status artifacts.
 
 Current local-dev baseline:
 
-- KAT: `kkachi-agent-tester 0.1.3`
-- Project root: `/Users/draccoon/Workspace/SeventeenthEarth/kkachi/kkachi-agent-tester`
-- KAT standalone evidence: `.kat/`
+- Manta: `manta 0.1.4`
+- Project root: `/Users/draccoon/Workspace/SeventeenthEarth/manta`
+- Manta standalone evidence: `.manta/`
 
 ## 1. Source Of Truth
 
@@ -17,13 +17,13 @@ Start from repository authority before changing behavior:
 - `README.md` for current CLI scope and user-facing examples.
 - `docs/README.md` for document roles and source-of-truth order.
 - `docs/integration-guide.md` for parent-project capability, ownership, and artifact-consumption contracts.
-- `docs/requirements-specs.md` for KAT requirements and non-goals.
+- `docs/requirements-specs.md` for Manta requirements and non-goals.
 - `docs/architecture.md` and `docs/architecture-decision-records.md` for architectural boundaries.
 - `docs/roadmap.md` for completed and planned task context.
 
 Treat docs carefully:
 
-- KAT remains standalone and deterministic unless an approved task changes that contract.
+- Manta remains standalone and deterministic unless an approved task changes that contract.
 
 
 ## 3. Think Before Coding
@@ -34,7 +34,7 @@ Before substantial edits:
 
 - State assumptions and success criteria when they affect implementation.
 - Prefer the smallest change that satisfies the requirement.
-- Push back on requests that make KAT a planner, reviewer, acceptance gate, waiver authority, or runtime orchestrator.
+- Push back on requests that make Manta a planner, reviewer, acceptance gate, waiver authority, or runtime orchestrator.
 - Ask only for user judgment when scope, authority, credentials, destructive actions, production effects, or materially branching choices remain unclear.
 
 For trivial, reversible, low-risk work, proceed without ceremony and verify the result.
@@ -52,7 +52,7 @@ Touch only what the task requires.
 
 Every changed line should trace to the user request, an active roadmap task, or a required verification fix.
 
-## 5. KAT Evidence Semantics
+## 5. Manta Evidence Semantics
 
 Preserve these invariants:
 
@@ -60,19 +60,18 @@ Preserve these invariants:
 - Parsers, rules, and summaries compress evidence only; they never change pass/fail.
 - Raw logs are preserved and may contain unredacted values; share raw-log excerpts cautiously.
 - Redaction/noise filtering applies to summaries/excerpts/status output, not to original raw logs.
-- `--run-id` artifacts must stay inside the matching `.kkachi/runs/<run_id>/artifacts/test/` path and must not cross-run or symlink-escape.
-- Standalone runs write under `.kat/runs/<UTC-timestamp>[-NNN]/`.
+- `--run-id` artifacts must stay inside the matching `.manta/runs/scoped/<run_id>/artifacts/test/` path and must not cross-run or symlink-escape.
+- Standalone runs write under `.manta/runs/standalone/<UTC-timestamp>[-NNN]/`.
 - Missing, malformed, unsupported, unsafe, overbroad, or stale evidence should fail closed or be reported as degraded according to the existing contract.
 
-Do not claim review acceptance, waiver, final acceptance, install, release, push, or runtime activation from KAT evidence alone.
+Do not claim review acceptance, waiver, final acceptance, install, release, push, or runtime activation from Manta evidence alone.
 
 ## 6. Local Artifact And Git Safety
 
 These are local runtime/evidence surfaces and should stay out of ordinary source commits unless explicitly scoped:
 
 ```text
-.kkachi/
-.kat/
+.manta/
 .codegraph/
 .omx/
 .omc/
@@ -88,18 +87,18 @@ Run the narrowest meaningful verification first, then broaden when shared behavi
 Common commands:
 
 ```bash
-HOME=/Users/draccoon kkachi-agent-tester run unit
-HOME=/Users/draccoon kkachi-agent-tester run integration
-HOME=/Users/draccoon kkachi-agent-tester run e2e
+HOME=/Users/draccoon manta run unit
+HOME=/Users/draccoon manta run integration
+HOME=/Users/draccoon manta run e2e
 HOME=/Users/draccoon go test ./...
 git diff --check
 ```
 
-Use `HOME=/Users/draccoon kkachi-agent-tester run all` or `HOME=/Users/draccoon make test` when full local release-style verification is needed. The full `make test` path includes format/lint/vet/guardrails/unit/integration/e2e and may fail if optional lint tooling is unavailable.
+Use `HOME=/Users/draccoon manta run all` or `HOME=/Users/draccoon make test` when full local release-style verification is needed. The full `make test` path includes format/lint/vet/guardrails/unit/integration/e2e and may fail if optional lint tooling is unavailable.
 
 Verification expectations:
 
-- Parser/rule changes: focused parser/rule tests plus a KAT run or summarize smoke.
+- Parser/rule changes: focused parser/rule tests plus a Manta run or summarize smoke.
 - Runner/artifact/path changes: runner tests, integration/E2E coverage, and path-safety checks.
 - CLI behavior changes: help/output examples, integration or E2E tests, and README/docs sync.
 - Docs/AGENTS/skill-guidance-only changes: file readback, cross-reference sanity, and `git diff --check` are usually sufficient unless executable commands were changed.

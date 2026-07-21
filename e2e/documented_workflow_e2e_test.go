@@ -22,7 +22,7 @@ func TestDocumentedCLIWorkflowAgainstFreshFixture(t *testing.T) {
 	if len(versionLines) != 2 {
 		t.Fatalf("unexpected version output %q", version)
 	}
-	const versionPrefix = "kkachi-agent-tester v"
+	const versionPrefix = "manta v"
 	if !strings.HasPrefix(versionLines[0], versionPrefix) {
 		t.Fatalf("unexpected human version output %q", versionLines[0])
 	}
@@ -37,7 +37,7 @@ func TestDocumentedCLIWorkflowAgainstFreshFixture(t *testing.T) {
 	if err := json.Unmarshal([]byte(versionLines[1]), &jsonVersion); err != nil {
 		t.Fatalf("decode JSON version output %q: %v", versionLines[1], err)
 	}
-	if jsonVersion.Name != "kkachi-agent-tester" || jsonVersion.Version != humanVersion {
+	if jsonVersion.Name != "manta" || jsonVersion.Version != humanVersion {
 		t.Fatalf("version surfaces disagree: human=%q JSON=%+v", versionLines[0], jsonVersion)
 	}
 	if got := strings.Count(userInterface, `cli_version: "`+humanVersion+`"`); got != 2 {
@@ -65,11 +65,11 @@ func TestDocumentedCLIWorkflowAgainstFreshFixture(t *testing.T) {
 
 	summarized := runDocumentationBlock(t, bin, repo, 0,
 		markdownCodeBlockAfter(t, userInterface, "Summarize an existing raw log without rerunning the command", "bash"))
-	if !strings.Contains(summarized, "Summary: .kkachi/runs/summarize-example/artifacts/test/unit.summary.md") {
+	if !strings.Contains(summarized, "Summary: .manta/runs/scoped/summarize-example/artifacts/test/unit.summary.md") {
 		t.Fatalf("summarize output does not report documented summary: %s", summarized)
 	}
 	assertDocumentedArtifacts(t, repo, "summarize-example")
-	markdownPath := filepath.Join(repo, ".kkachi", "runs", "summarize-example", "artifacts", "test", "unit.summary.md")
+	markdownPath := filepath.Join(repo, ".manta", "runs", "scoped", "summarize-example", "artifacts", "test", "unit.summary.md")
 	markdownData, err := os.ReadFile(markdownPath)
 	if err != nil {
 		t.Fatal(err)
@@ -101,12 +101,12 @@ func TestDocumentedCLIWorkflowAgainstFreshFixture(t *testing.T) {
 
 	ruleWorkflow := runDocumentationBlock(t, bin, repo, 0,
 		markdownCodeBlockAfter(t, userInterface, "Fixture-backed rule workflow examples", "bash"))
-	for _, want := range []string{"PASS generic-v1 expected=2:5 actual=2:5", "Proposed rule:", ".kat/rule-proposals/", "disabled"} {
+	for _, want := range []string{"PASS generic-v1 expected=2:5 actual=2:5", "Proposed rule:", ".manta/rule-proposals/", "disabled"} {
 		if !strings.Contains(ruleWorkflow, want) {
 			t.Fatalf("rule workflow output missing %q: %s", want, ruleWorkflow)
 		}
 	}
-	storedRule, err := os.ReadFile(filepath.Join(repo, ".kkachi", "tester", "rules", "generic-v1.yaml"))
+	storedRule, err := os.ReadFile(filepath.Join(repo, ".manta", "tester", "rules", "generic-v1.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,18 +140,18 @@ func TestDocumentedCLIWorkflowAgainstFreshFixture(t *testing.T) {
 	}
 	for i, expectedExit := range []int{0, 1, 0} {
 		output := runDocumentationBlock(t, bin, readmeRepo, expectedExit, quickStart[i])
-		if i == 2 && (!strings.Contains(output, "# KAT Summary: demo") || !strings.Contains(output, "token=<redacted>")) {
+		if i == 2 && (!strings.Contains(output, "# Manta Summary: demo") || !strings.Contains(output, "token=<redacted>")) {
 			t.Fatalf("README summary inspection did not show the documented redacted evidence: %s", output)
 		}
 	}
-	entries, err := os.ReadDir(filepath.Join(readmeRepo, ".kat", "runs"))
+	entries, err := os.ReadDir(filepath.Join(readmeRepo, ".manta", "runs", "standalone"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(entries) != 1 {
 		t.Fatalf("README example created %d standalone runs, want 1", len(entries))
 	}
-	readmeRunDir := filepath.Join(readmeRepo, ".kat", "runs", entries[0].Name())
+	readmeRunDir := filepath.Join(readmeRepo, ".manta", "runs", "standalone", entries[0].Name())
 	for _, name := range []string{"demo.raw.log", "demo.summary.json", "demo.summary.md", "demo.status.json", "excerpts/F001.log"} {
 		if _, err := os.Stat(filepath.Join(readmeRunDir, filepath.FromSlash(name))); err != nil {
 			t.Fatalf("README example artifact %s is missing: %v", name, err)
@@ -159,14 +159,14 @@ func TestDocumentedCLIWorkflowAgainstFreshFixture(t *testing.T) {
 	}
 
 	integrationRepo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(integrationRepo, ".kkachi"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(integrationRepo, ".manta"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	integrationConfig := markdownCodeBlockAfter(t, integrationGuide, "Create `.kkachi/tester.yaml`", "yaml")
-	if err := os.WriteFile(filepath.Join(integrationRepo, ".kkachi", "tester.yaml"), []byte(integrationConfig), 0o644); err != nil {
+	integrationConfig := markdownCodeBlockAfter(t, integrationGuide, "Create `.manta/tester.yaml`", "yaml")
+	if err := os.WriteFile(filepath.Join(integrationRepo, ".manta", "tester.yaml"), []byte(integrationConfig), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(integrationRepo, "go.mod"), []byte("module example.com/kat-docs\n\ngo 1.26\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(integrationRepo, "go.mod"), []byte("module example.com/manta-docs\n\ngo 1.26\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(integrationRepo, "documented_test.go"), []byte("package docs\n\nimport \"testing\"\n\nfunc TestDocumentedIntegration(t *testing.T) {}\n"), 0o644); err != nil {
@@ -188,7 +188,7 @@ func runDocumentedCommand(t *testing.T, bin, repo string, expectedExit int, args
 
 func assertDocumentedArtifacts(t *testing.T, repo, runID string) {
 	t.Helper()
-	base := filepath.Join(repo, ".kkachi", "runs", runID, "artifacts", "test")
+	base := filepath.Join(repo, ".manta", "runs", "scoped", runID, "artifacts", "test")
 	for _, name := range []string{"unit.raw.log", "unit.summary.json", "unit.summary.md", "unit.status.json", "excerpts/F001.log"} {
 		if _, err := os.Stat(filepath.Join(base, filepath.FromSlash(name))); err != nil {
 			t.Fatalf("documented artifact %s is missing: %v", name, err)

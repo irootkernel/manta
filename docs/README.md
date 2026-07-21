@@ -1,23 +1,23 @@
-# KAT Documentation
+# Manta Documentation
 
-Status: Current for `kkachi-agent-tester v0.1.3`
+Status: Current for `manta v0.1.4`
 
-This directory contains KAT's integration contracts, technical design, delivery history, and maintainer guidance. Start with the document that matches your role instead of reading the directory in filename order.
+This directory contains Manta's integration contracts, technical design, delivery history, and maintainer guidance. Start with the document that matches your role instead of reading the directory in filename order.
 
 ## Recommended reading paths
 
-For a person running KAT directly:
+For a person running Manta directly:
 
 1. Read the repository [README](../README.md) and complete its five-minute example.
 2. Use the [CLI reference](user-interface.md) for options, rule management, exit codes, and tested examples.
 
-For a parent project integrating KAT:
+For a parent project integrating Manta:
 
 1. Read the [integration guide](integration-guide.md) for the supported capability matrix, ownership boundaries, project files, invocation, and rollout checklist.
 2. Read the [architecture](architecture.md) for the summary/status schemas, artifact layout, watcher hash, and degraded-evidence behavior.
-3. Consult the [architecture decisions](architecture-decision-records.md) before proposing a change to KAT's authority or evidence semantics.
+3. Consult the [architecture decisions](architecture-decision-records.md) before proposing a change to Manta's authority or evidence semantics.
 
-For KAT maintainers:
+For Manta maintainers:
 
 1. Follow [AGENTS.md](../AGENTS.md) for repository workflow and verification expectations.
 2. Use the [requirements](requirements-specs.md) as the behavioral source of truth.
@@ -29,7 +29,7 @@ For KAT maintainers:
 
 The standalone v0.1 baseline and the recorded `HARDE-001` through `HARDE-007` hardening requirements are implemented. The current supported surfaces include configured and ad-hoc command execution, raw-log summarization, excerpt lookup, five parsers, rule lifecycle commands, bounded/redacted derived evidence, collision-free standalone artifacts, fixed run-scoped artifacts, and deterministic status JSON.
 
-There are currently no open implementation items in `todo.md`. That statement is intentionally narrower than “KAT provides every testing or orchestration capability.” Features listed as unsupported or out of scope in the [integration guide](integration-guide.md#not-provided-by-kat-v01) are not implicitly planned or promised.
+There are currently no open implementation items in `todo.md`. That statement is intentionally narrower than “Manta provides every testing or orchestration capability.” Features listed as unsupported or out of scope in the [integration guide](integration-guide.md#not-provided-by-manta-v01) are not implicitly planned or promised.
 
 ## Document catalog
 

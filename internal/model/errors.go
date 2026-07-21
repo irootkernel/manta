@@ -11,13 +11,13 @@ const (
 	ExitCodeTimeout       ErrorCode = 124
 )
 
-type KATError struct {
+type MantaError struct {
 	Code ErrorCode
 	Op   string
 	Err  error
 }
 
-func (e *KATError) Error() string {
+func (e *MantaError) Error() string {
 	if e == nil {
 		return ""
 	}
@@ -27,27 +27,27 @@ func (e *KATError) Error() string {
 	return fmt.Sprintf("%s: %v", e.Op, e.Err)
 }
 
-func (e *KATError) Unwrap() error {
+func (e *MantaError) Unwrap() error {
 	if e == nil {
 		return nil
 	}
 	return e.Err
 }
 
-func NewKATError(code ErrorCode, op string, err error) error {
+func NewMantaError(code ErrorCode, op string, err error) error {
 	if err == nil {
 		return nil
 	}
-	return &KATError{Code: code, Op: op, Err: err}
+	return &MantaError{Code: code, Op: op, Err: err}
 }
 
 func ExitCodeFor(err error) int {
 	if err == nil {
 		return 0
 	}
-	var katErr *KATError
-	if ok := As(err, &katErr); ok {
-		return int(katErr.Code)
+	var mantaErr *MantaError
+	if ok := As(err, &mantaErr); ok {
+		return int(mantaErr.Code)
 	}
 	return int(ExitCodeParserError)
 }
@@ -56,8 +56,8 @@ func As(err error, target any) bool {
 	type unwrapper interface{ Unwrap() error }
 	for err != nil {
 		switch t := target.(type) {
-		case **KATError:
-			if v, ok := err.(*KATError); ok {
+		case **MantaError:
+			if v, ok := err.(*MantaError); ok {
 				*t = v
 				return true
 			}

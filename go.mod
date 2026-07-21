@@ -1,4 +1,4 @@
-module github.com/SeventeenthEarth/kkachi-agent-tester
+module github.com/irootkernel/manta
 
 go 1.26
 

@@ -13,13 +13,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/artifacts"
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/config"
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/extract"
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/rules"
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/runner"
-	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
+	"github.com/irootkernel/manta/internal/artifacts"
+	"github.com/irootkernel/manta/internal/config"
+	"github.com/irootkernel/manta/internal/extract"
+	"github.com/irootkernel/manta/internal/model"
+	"github.com/irootkernel/manta/internal/rules"
+	"github.com/irootkernel/manta/internal/runner"
+	"github.com/irootkernel/manta/internal/safety"
 )
 
 type globalOptions struct {
@@ -52,7 +52,7 @@ const (
 )
 
 func Main(args []string, stdout, stderr io.Writer) int {
-	return Run(args, stdout, stderr, NewBuildInfo("kkachi-agent-tester", "0.1.3", "unknown", "unknown"))
+	return Run(args, stdout, stderr, NewBuildInfo("manta", "0.1.4", "unknown", "unknown"))
 }
 
 func Run(args []string, stdout, stderr io.Writer, info BuildInfo) int {
@@ -66,7 +66,7 @@ func Run(args []string, stdout, stderr io.Writer, info BuildInfo) int {
 		return 0
 	}
 	if len(remaining) == 0 {
-		writeLine(stderr, "usage: kkachi-agent-tester [global options] <version|run|excerpt|summarize|rules>")
+		writeLine(stderr, "usage: manta [global options] <version|run|excerpt|summarize|rules>")
 		return int(model.ExitCodeConfigError)
 	}
 	if remaining[0] == "version" {
@@ -121,7 +121,7 @@ func versionCommand(opts globalOptions, args []string, stdout, stderr io.Writer,
 		return int(model.ExitCodeConfigError)
 	}
 	if len(fs.Args()) != 0 {
-		writeLine(stderr, "usage: kkachi-agent-tester version [--json]")
+		writeLine(stderr, "usage: manta version [--json]")
 		return int(model.ExitCodeConfigError)
 	}
 	writeVersion(stdout, info, jsonMode)
@@ -188,7 +188,7 @@ func summarizeCommand(opts globalOptions, args []string, stdout, stderr io.Write
 	}
 	rest := fs.Args()
 	if len(rest) != 1 {
-		writeLine(stderr, "usage: kkachi-agent-tester summarize <raw-log>")
+		writeLine(stderr, "usage: manta summarize <raw-log>")
 		return int(model.ExitCodeConfigError)
 	}
 	req := model.RunRequest{
@@ -228,7 +228,7 @@ func executeRun(req model.RunRequest) (runResult, int, error) {
 	if req.Mode == model.RunModeConfigured {
 		cmd, ok := cfg.Commands[req.CommandID]
 		if !ok {
-			return runResult{}, 0, model.NewKATError(model.ExitCodeConfigError, "resolve command", fmt.Errorf("unknown command id %q", req.CommandID))
+			return runResult{}, 0, model.NewMantaError(model.ExitCodeConfigError, "resolve command", fmt.Errorf("unknown command id %q", req.CommandID))
 		}
 		commandID = req.CommandID
 		lane = cmd.Lane
@@ -264,7 +264,7 @@ func executeRun(req model.RunRequest) (runResult, int, error) {
 	runOutput, runErr := runner.Execute(context.Background(), req.RepoRoot, commandID, lane, parser, argv, timeoutSec, rawFile)
 	closeErr := rawFile.Close()
 	if closeErr != nil {
-		return runResult{}, 0, model.NewKATError(model.ExitCodeArtifactError, "close raw log", closeErr)
+		return runResult{}, 0, model.NewMantaError(model.ExitCodeArtifactError, "close raw log", closeErr)
 	}
 	if runErr != nil {
 		return runResult{}, 0, runErr
@@ -293,7 +293,7 @@ func executeSummarize(req model.RunRequest, rawLogArg string) (runResult, int, e
 	}
 	raw, err := os.ReadFile(resolved)
 	if err != nil {
-		return runResult{}, 0, model.NewKATError(model.ExitCodeConfigError, "read raw log", err)
+		return runResult{}, 0, model.NewMantaError(model.ExitCodeConfigError, "read raw log", err)
 	}
 	commandID := summarizeCommandID(resolved)
 	lane := commandID
@@ -438,7 +438,7 @@ func writeExcerpts(redactor safety.Redactor, noiseFilters []string, paths model.
 		redacted := safety.FilterNoise(redactor.Apply(content), noiseFilters)
 		redacted = safety.BoundBytes(redacted, safety.MaxExcerptBytes)
 		if err := safety.ValidateArtifactIdentifier("failure id", failure.ID); err != nil {
-			return model.NewKATError(model.ExitCodeArtifactError, "write excerpt", err)
+			return model.NewMantaError(model.ExitCodeArtifactError, "write excerpt", err)
 		}
 		excerptPath := filepath.Join(paths.ExcerptsDir, failure.ID+".log")
 		if err := artifacts.WriteExcerpt(paths, excerptPath, redacted); err != nil {
@@ -534,7 +534,7 @@ func exitCodeFromRun(runOutput model.RunOutput) int {
 }
 
 func printRunResult(w io.Writer, result runResult) {
-	writeLine(w, "KAT run complete")
+	writeLine(w, "Manta run complete")
 	writef(w, "Command: %s\n", result.Command)
 	writef(w, "Status: %s\n", result.Status)
 	writef(w, "Exit code: %d\n", result.ExitCode)
@@ -562,7 +562,7 @@ func excerptCommand(opts globalOptions, args []string, stdout, stderr io.Writer)
 	}
 	rest := fs.Args()
 	if summaryPath == "" || len(rest) != 1 {
-		writeLine(stderr, "usage: kkachi-agent-tester excerpt --summary <summary-path> <failure-id>")
+		writeLine(stderr, "usage: manta excerpt --summary <summary-path> <failure-id>")
 		return int(model.ExitCodeConfigError)
 	}
 	resolved := summaryPath
