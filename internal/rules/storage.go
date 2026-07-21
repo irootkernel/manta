@@ -3,7 +3,9 @@ package rules
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -148,7 +150,7 @@ func TestRule(repoRoot, id, rawLogPath string, expectStart, expectEnd int) (mode
 		return model.RuleTestResult{}, model.NewKATError(model.ExitCodeConfigError, "read raw log", err)
 	}
 	run := model.RunOutput{Status: model.RunStatusFailed}
-	processed, err := extract.Process(raw, run, []model.Rule{rule})
+	processed, err := extract.ProcessRules(raw, run, []model.Rule{rule})
 	if err != nil {
 		return model.RuleTestResult{}, err
 	}
@@ -171,6 +173,10 @@ func TestRule(repoRoot, id, rawLogPath string, expectStart, expectEnd int) (mode
 }
 
 func Propose(repoRoot, lane, parser, rawLogPath string, startLine, endLine int) (model.RuleProposal, error) {
+	return proposeAt(repoRoot, lane, parser, rawLogPath, startLine, endLine, time.Now().UTC())
+}
+
+func proposeAt(repoRoot, lane, parser, rawLogPath string, startLine, endLine int, now time.Time) (model.RuleProposal, error) {
 	if strings.TrimSpace(lane) == "" {
 		return model.RuleProposal{}, model.NewKATError(model.ExitCodeConfigError, "propose rule", fmt.Errorf("--lane is required"))
 	}
@@ -241,15 +247,39 @@ func Propose(repoRoot, lane, parser, rawLogPath string, startLine, endLine int) 
 	if err := safety.MkdirAllWithin(repoRoot, ProposedRulesDir(repoRoot), 0o755); err != nil {
 		return model.RuleProposal{}, model.NewKATError(model.ExitCodeArtifactError, "create proposal directory", err)
 	}
-	path := filepath.Join(ProposedRulesDir(repoRoot), fmt.Sprintf("%s-%s.yaml", proposalID, time.Now().UTC().Format("20060102t150405")))
 	data, err := yaml.Marshal(&rule)
 	if err != nil {
 		return model.RuleProposal{}, model.NewKATError(model.ExitCodeArtifactError, "marshal proposal rule", err)
 	}
-	if err := safety.WriteFileWithin(repoRoot, path, data, 0o644); err != nil {
-		return model.RuleProposal{}, model.NewKATError(model.ExitCodeArtifactError, "write proposal rule", err)
+	path, err := writeUniqueProposal(repoRoot, proposalID, now, data)
+	if err != nil {
+		return model.RuleProposal{}, err
 	}
 	return model.RuleProposal{Rule: rule, Path: path}, nil
+}
+
+func writeUniqueProposal(repoRoot, proposalID string, now time.Time, data []byte) (string, error) {
+	base := fmt.Sprintf("%s-%s", proposalID, now.UTC().Format("20060102t150405"))
+	for sequence := 0; ; sequence++ {
+		name := base
+		if sequence > 0 {
+			name = fmt.Sprintf("%s-%03d", base, sequence)
+		}
+		path := filepath.Join(ProposedRulesDir(repoRoot), name+".yaml")
+		file, err := safety.OpenFileWithin(repoRoot, path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return "", model.NewKATError(model.ExitCodeArtifactError, "write proposal rule", err)
+		}
+		_, writeErr := file.Write(data)
+		closeErr := file.Close()
+		if err := errors.Join(writeErr, closeErr); err != nil {
+			return "", model.NewKATError(model.ExitCodeArtifactError, "write proposal rule", err)
+		}
+		return path, nil
+	}
 }
 
 func ValidateStoredRule(rule model.Rule) error {
@@ -263,7 +293,10 @@ func ValidateStoredRule(rule model.Rule) error {
 		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q must define valid provenance source_span", rule.ID))
 	}
 	if rule.Status == model.RuleStatusDisabled && strings.TrimSpace(rule.DeletionReason) == "" {
-		return nil
+		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("disabled rule %q must define deletion_reason", rule.ID))
+	}
+	if rule.Status == model.RuleStatusActive && strings.TrimSpace(rule.DeletionReason) != "" {
+		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("active rule %q must not define deletion_reason", rule.ID))
 	}
 	return nil
 }
@@ -274,7 +307,7 @@ func readRuleFile(repoRoot, path string) (model.Rule, error) {
 		return model.Rule{}, model.NewKATError(model.ExitCodeConfigError, "read rule file", err)
 	}
 	var rule model.Rule
-	if err := yaml.Unmarshal(data, &rule); err != nil {
+	if err := safety.DecodeYAMLStrict(data, &rule); err != nil {
 		return model.Rule{}, model.NewKATError(model.ExitCodeConfigError, "parse rule file", fmt.Errorf("%s: %w", path, err))
 	}
 	rule.SourcePath = path
@@ -314,11 +347,10 @@ func ensureRuleIDAvailable(repoRoot, id string) error {
 
 func quoteFirstMeaningfulLine(lines []string) string {
 	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
+		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		return "^" + regexp.QuoteMeta(trimmed) + "$"
+		return "^" + regexp.QuoteMeta(strings.TrimSuffix(line, "\r")) + "$"
 	}
 	return ""
 }

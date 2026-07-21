@@ -138,7 +138,7 @@ extract:
 confidence: medium
 ```
 
-Validation rejects missing IDs, missing provenance, duplicate IDs, excessive `max_block_lines`, invalid capture groups, invalid or unsupported regex, and rule overmatch during `rules test`.
+Validation rejects unknown YAML fields, extra YAML documents, missing IDs or provenance, duplicate IDs, negative context, excessive `max_block_lines`, invalid capture groups, invalid or unsupported regex, inconsistent active/disabled deletion reasons, and rule overmatch during rule-only `rules test` extraction.
 
 ## Regex safety guidance
 

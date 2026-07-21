@@ -37,6 +37,10 @@ func killProcess(cmd *exec.Cmd) error {
 	return err
 }
 
+func cleanupProcessGroup(cmd *exec.Cmd) error {
+	return killProcess(cmd)
+}
+
 func signalExitCode(sig os.Signal) int {
 	if signalValue, ok := sig.(syscall.Signal); ok {
 		return 128 + int(signalValue)

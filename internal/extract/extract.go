@@ -23,13 +23,22 @@ type lineIndex struct {
 }
 
 func Process(raw []byte, run model.RunOutput, rules []model.Rule) (model.RunOutput, error) {
+	return process(raw, run, rules, true)
+}
+
+// ProcessRules extracts evidence only from the supplied rules.
+func ProcessRules(raw []byte, run model.RunOutput, rules []model.Rule) (model.RunOutput, error) {
+	return process(raw, run, rules, false)
+}
+
+func process(raw []byte, run model.RunOutput, rules []model.Rule, parserFallback bool) (model.RunOutput, error) {
 	text := string(raw)
 	if err := safety.EnsureInputWithinLimit(text); err != nil {
 		return run, err
 	}
 	lines := buildLineIndex(text)
 	failures := applyRules(lines, text, rules)
-	if len(failures) == 0 {
+	if len(failures) == 0 && parserFallback {
 		failures = parserFailures(run.Metadata.Parser, lines, text)
 	}
 	warnings := genericWarnings(lines)
@@ -55,7 +64,7 @@ func buildLineIndex(text string) []lineIndex {
 	offset := 0
 	for _, part := range parts {
 		trimmed := strings.TrimSuffix(part, "\n")
-		lines = append(lines, lineIndex{text: trimmed, start: offset, end: offset + len(trimmed)})
+		lines = append(lines, lineIndex{text: strings.TrimSuffix(trimmed, "\r"), start: offset, end: offset + len(trimmed)})
 		offset += len(part)
 	}
 	if len(text) > 0 && !strings.HasSuffix(text, "\n") {
@@ -87,11 +96,14 @@ func applyRules(lines []lineIndex, text string, rules []model.Rule) []model.Fail
 			if !startRE.MatchString(line.text) {
 				continue
 			}
-			startLine := max(0, idx-rule.Match.IncludeContext.Before)
-			endLine := min(len(lines)-1, idx+rule.Match.End.MaxBlockLines)
+			before := max(0, rule.Match.IncludeContext.Before)
+			after := max(0, rule.Match.IncludeContext.After)
+			maxBlockLines := max(0, rule.Match.End.MaxBlockLines)
+			startLine := max(0, idx-before)
+			endLine := min(len(lines)-1, idx+maxBlockLines)
 			for j := idx; j <= endLine; j++ {
 				if j > idx && (lines[j].text == "" || matchesAny(lines[j].text, endREs)) {
-					endLine = min(len(lines)-1, j+rule.Match.IncludeContext.After)
+					endLine = min(len(lines)-1, j+after)
 					break
 				}
 			}

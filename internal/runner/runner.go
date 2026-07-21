@@ -75,6 +75,10 @@ func executeWithSignals(ctx context.Context, workDir, commandID, lane, parser st
 
 	select {
 	case err := <-waited:
+		_ = cleanupProcessGroup(cmd)
+		if errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
+			err = nil
+		}
 		output := completedOutput(started, commandID, lane, parser, argv, capture)
 		return classifyWait(output, err)
 	case sig := <-interrupts:

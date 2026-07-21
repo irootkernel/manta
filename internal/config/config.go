@@ -9,8 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
 	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
 )
@@ -41,7 +39,7 @@ func Load(repoRoot, override string, allowMissing bool) (model.Config, string, e
 	}
 
 	var cfg model.Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err := safety.DecodeYAMLStrict(data, &cfg); err != nil {
 		return model.Config{}, path, model.NewKATError(model.ExitCodeConfigError, "parse config", err)
 	}
 	if cfg.Commands == nil {

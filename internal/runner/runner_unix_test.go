@@ -3,6 +3,7 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -111,6 +112,78 @@ func TestExecuteCleansDescendantsAfterLeaderExits(t *testing.T) {
 	if resultValue.output.Status != model.RunStatusKilled || resultValue.output.Metadata.ExitCode != 143 {
 		t.Fatalf("expected killed/143, got status=%s exit=%d", resultValue.output.Status, resultValue.output.Metadata.ExitCode)
 	}
+	requirePIDGone(t, pid)
+}
+
+func TestExecuteRecoversLeaderResultAfterWaitDelay(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name     string
+		exitCode int
+		status   model.RunStatus
+	}{
+		{name: "passed leader", exitCode: 0, status: model.RunStatusPassed},
+		{name: "failed leader", exitCode: 7, status: model.RunStatusFailed},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			repo := t.TempDir()
+			script := filepath.Join(repo, "wait-delay.sh")
+			content := strings.Join([]string{
+				"#!/bin/sh",
+				"sh -c 'echo $$ > child.pid; sleep 30; echo late' &",
+				"while [ ! -s child.pid ]; do sleep 0.01; done",
+				"echo started",
+				"exit " + strconv.Itoa(test.exitCode),
+			}, "\n") + "\n"
+			if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			var raw bytes.Buffer
+			started := time.Now()
+			output, err := executeWithSignals(context.Background(), repo, "wait-delay", "unit", "generic", []string{"sh", "wait-delay.sh"}, 10, &raw, make(chan os.Signal, 2), 50*time.Millisecond)
+			if err != nil {
+				t.Fatalf("executeWithSignals failed: %v", err)
+			}
+			if elapsed := time.Since(started); elapsed > time.Second {
+				t.Fatalf("wait-delay recovery took %s", elapsed)
+			}
+			if output.Status != test.status || output.Metadata.ExitCode != test.exitCode {
+				t.Fatalf("status=%s exit=%d, want %s/%d", output.Status, output.Metadata.ExitCode, test.status, test.exitCode)
+			}
+			if raw.String() != "started\n" {
+				t.Fatalf("raw output = %q", raw.String())
+			}
+			pid := readPID(t, filepath.Join(repo, "child.pid"))
+			t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
+			requirePIDGone(t, pid)
+		})
+	}
+}
+
+func TestExecuteCleansDescendantsAfterSuccessfulLeaderExit(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	script := filepath.Join(repo, "background.sh")
+	content := strings.Join([]string{
+		"#!/bin/sh",
+		"sh -c 'echo $$ > child.pid; sleep 30' </dev/null >/dev/null 2>&1 &",
+		"while [ ! -s child.pid ]; do sleep 0.01; done",
+		"echo complete",
+	}, "\n") + "\n"
+	if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var raw bytes.Buffer
+	output, err := executeWithSignals(context.Background(), repo, "background", "unit", "generic", []string{"sh", "background.sh"}, 10, &raw, make(chan os.Signal, 2), 50*time.Millisecond)
+	if err != nil {
+		t.Fatalf("executeWithSignals failed: %v", err)
+	}
+	if output.Status != model.RunStatusPassed || output.Metadata.ExitCode != 0 {
+		t.Fatalf("status=%s exit=%d, want passed/0", output.Status, output.Metadata.ExitCode)
+	}
+	pid := readPID(t, filepath.Join(repo, "child.pid"))
+	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
 	requirePIDGone(t, pid)
 }
 

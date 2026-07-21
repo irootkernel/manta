@@ -4,7 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -48,6 +50,68 @@ func TestLoadApplicableFailsOnInvalidDiscoveredFutureParserRule(t *testing.T) {
 	}
 	if _, err := LoadApplicable(repo, "unit", "generic"); err == nil {
 		t.Fatal("expected any discovered invalid rule file to fail closed")
+	}
+}
+
+func TestLoadAllRejectsUnknownFields(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	rulesDir := RulesDir(repo)
+	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := yaml.Marshal(validRule("unknown-field"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = append(data, []byte("unknown_field: true\n")...)
+	if err := os.WriteFile(filepath.Join(rulesDir, "unknown-field.yaml"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadAll(repo); err == nil {
+		t.Fatal("expected unknown rule field to fail closed")
+	}
+}
+
+func TestValidateStoredRuleRejectsInvalidContextAndStatus(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		mutate func(*model.Rule)
+	}{
+		{
+			name: "negative before context",
+			mutate: func(rule *model.Rule) {
+				rule.Match.IncludeContext.Before = -1
+			},
+		},
+		{
+			name: "negative after context",
+			mutate: func(rule *model.Rule) {
+				rule.Match.IncludeContext.After = -1
+			},
+		},
+		{
+			name: "disabled without reason",
+			mutate: func(rule *model.Rule) {
+				rule.Status = model.RuleStatusDisabled
+			},
+		},
+		{
+			name: "active with deletion reason",
+			mutate: func(rule *model.Rule) {
+				rule.DeletionReason = "stale reason"
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			rule := validRule("invalid-state")
+			test.mutate(&rule)
+			if err := ValidateStoredRule(rule); err == nil {
+				t.Fatalf("expected %s to fail validation", test.name)
+			}
+		})
 	}
 }
 
@@ -373,6 +437,43 @@ func TestTestRuleMatchesExpectedSpan(t *testing.T) {
 	}
 }
 
+func TestTestRuleDoesNotFallbackToGenericParser(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	rule := validRule("never-match")
+	rule.Match.Start.Regex = `^THIS-WILL-NEVER-MATCH$`
+	if _, err := Create(repo, rule); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	rawPath := filepath.Join(repo, "fixture.raw.log")
+	if err := os.WriteFile(rawPath, []byte("Error: generic fallback must not count\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := TestRule(repo, rule.ID, rawPath, 1, 1)
+	if err == nil || result.FailureCount != 0 {
+		t.Fatalf("expected rule-only miss, got result=%+v err=%v", result, err)
+	}
+}
+
+func TestRuleMatchesCRLFLineEndings(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	rule := validRule("crlf-rule")
+	rule.Match.Start.Regex = `^BOOM$`
+	rule.Extract = model.RuleExtract{}
+	if _, err := Create(repo, rule); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	rawPath := filepath.Join(repo, "fixture.raw.log")
+	if err := os.WriteFile(rawPath, []byte("BOOM\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := TestRule(repo, rule.ID, rawPath, 1, 2)
+	if err != nil || !result.Passed {
+		t.Fatalf("expected CRLF rule match, got result=%+v err=%v", result, err)
+	}
+}
+
 func TestProposeWritesRunLocalProposal(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
@@ -396,6 +497,69 @@ func TestProposeWritesRunLocalProposal(t *testing.T) {
 	}
 	if proposal.Rule.Provenance.SourceSpan.StartLine != 2 || proposal.Rule.Provenance.SourceSpan.EndLine != 4 {
 		t.Fatalf("unexpected proposal span %+v", proposal.Rule.Provenance.SourceSpan)
+	}
+}
+
+func TestProposePreservesMeaningfulLineWhitespace(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	rawPath := filepath.Join(repo, "indented.raw.log")
+	rawText := "noise\n  TypeError: boom\nsrc/foo.ts:99:7\n✗ renders empty state\n\nafter\n"
+	if err := os.WriteFile(rawPath, []byte(rawText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	proposal, err := Propose(repo, "unit", "generic", rawPath, 2, 4)
+	if err != nil {
+		t.Fatalf("Propose failed: %v", err)
+	}
+	if proposal.Rule.Match.Start.Regex != `^  TypeError: boom$` {
+		t.Fatalf("proposal start regex = %q", proposal.Rule.Match.Start.Regex)
+	}
+	if _, err := Create(repo, proposal.Rule); err != nil {
+		t.Fatalf("Create proposal failed: %v", err)
+	}
+	result, err := TestRule(repo, proposal.Rule.ID, rawPath, 1, 6)
+	if err != nil || !result.Passed {
+		t.Fatalf("proposed rule did not match its source span: result=%+v err=%v", result, err)
+	}
+}
+
+func TestProposeAllocatesUniqueFilesConcurrently(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	rawPath := filepath.Join(repo, "unit.raw.log")
+	if err := os.WriteFile(rawPath, []byte("TypeError: boom\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fixed := time.Date(2026, 7, 21, 1, 2, 3, 0, time.UTC)
+	const count = 12
+	paths := make(chan string, count)
+	errs := make(chan error, count)
+	var wg sync.WaitGroup
+	for range count {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			proposal, err := proposeAt(repo, "unit", "generic", rawPath, 1, 1, fixed)
+			if err != nil {
+				errs <- err
+				return
+			}
+			paths <- proposal.Path
+		}()
+	}
+	wg.Wait()
+	close(paths)
+	close(errs)
+	for err := range errs {
+		t.Errorf("Propose failed: %v", err)
+	}
+	unique := map[string]bool{}
+	for path := range paths {
+		unique[path] = true
+	}
+	if len(unique) != count {
+		t.Fatalf("unique proposal paths = %d, want %d", len(unique), count)
 	}
 }
 

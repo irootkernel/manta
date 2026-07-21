@@ -14,6 +14,7 @@ import (
 
 	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
 	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/rules"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
 )
 
 func rulesCommand(opts globalOptions, args []string, stdout, stderr io.Writer) int {
@@ -267,7 +268,7 @@ func readRuleInput(path string) (model.Rule, error) {
 		return model.Rule{}, model.NewKATError(model.ExitCodeConfigError, "read rule input", err)
 	}
 	var rule model.Rule
-	if err := yaml.Unmarshal(data, &rule); err != nil {
+	if err := safety.DecodeYAMLStrict(data, &rule); err != nil {
 		return model.Rule{}, model.NewKATError(model.ExitCodeConfigError, "parse rule input", err)
 	}
 	return rule, nil

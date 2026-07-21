@@ -21,6 +21,10 @@ func killProcess(cmd *exec.Cmd) error {
 	return cmd.Process.Kill()
 }
 
+func cleanupProcessGroup(_ *exec.Cmd) error {
+	return nil
+}
+
 func signalExitCode(sig os.Signal) int {
 	if sig == os.Interrupt {
 		return 130

@@ -83,6 +83,8 @@ Default config path:
 
 Run IDs, configured command IDs, and rule IDs must match `[A-Za-z0-9][A-Za-z0-9_-]*`. KAT rejects path syntax in these identifiers before command execution or artifact writes.
 
+Config and rule YAML accept exactly one document and reject unknown fields. Disabled rules require a non-empty `deletion_reason`; active rules must not carry one.
+
 Project-local active rules live under:
 
 ```text

@@ -88,6 +88,9 @@ func ValidateApplicable(rule model.Rule) error {
 	if rule.Match.End.MaxBlockLines <= 0 || rule.Match.End.MaxBlockLines > safety.MaxBlockLines {
 		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q max_block_lines must be between 1 and %d", rule.ID, safety.MaxBlockLines))
 	}
+	if rule.Match.IncludeContext.Before < 0 || rule.Match.IncludeContext.After < 0 {
+		return model.NewKATError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q include_context before and after must be non-negative", rule.ID))
+	}
 	if _, err := validateRegex(rule.Match.Start.Regex, rule.ID, "start"); err != nil {
 		return err
 	}
