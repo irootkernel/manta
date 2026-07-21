@@ -1,7 +1,7 @@
 # Manta Architecture
 
-Status: Complete through `HARDE-007` and `TAGS-001`
-Scope: Standalone Manta v0.1 architecture, including schema-v2 tag selectors
+Status: Complete through `HARDE-007`, `TAGS-001`, and `RELRV-001`
+Scope: Standalone Manta v0.1 architecture, including schema-v2 tag selectors and release-readiness follow-up
 
 This document defines Manta's technical and artifact contracts. See the [integration guide](integration-guide.md) for parent-project ownership, supported capability status, and rollout guidance.
 
@@ -246,6 +246,9 @@ Command execution status is authoritative. Parser quality only affects evidence 
 - A failed command retains its non-zero exit code even if no parser matched a span.
 - Timed-out and killed commands retain their original status and process-compatible exit code.
 - Any authoritative non-pass result with no useful span retains its status and exit code with `extractor_status: degraded`.
+- Execution and summarize logs larger than 256 KiB are extracted from at most the final 256 KiB, beginning at the first complete line in that window. Spans retain absolute line and byte offsets into the full raw log.
+- A bounded-tail scan always reports `extractor_status: degraded`, even when it finds useful evidence, because earlier evidence may have been omitted.
+- Rule fixture testing still rejects inputs larger than 256 KiB because an incomplete scan cannot prove that a rule did not miss or overmatch evidence.
 - Parser or rule matches and misses never convert an authoritative non-pass result into pass.
 - Project rules run before the selected parser. When no rule matches, a specialized parser uses only its own patterns and never retries generic extraction.
 
@@ -253,6 +256,9 @@ Command execution status is authoritative. Parser quality only affects evidence 
 |---|---|---|---:|
 | Specialized parser miss after command pass | `passed` / `0` | `no_match` | `0` |
 | Specialized parser miss after command failure, timeout, or kill | original status / original exit code | `degraded` | original exit code |
+| Bounded-tail extraction after command pass | `passed` / `0` | `degraded` | `0` |
+| Bounded-tail extraction after command failure, timeout, or kill | original status / original exit code | `degraded` | original exit code |
+| Bounded-tail extraction during standalone summarize | inferred status / inferred exit code | `degraded` | `0` |
 | Extraction internal error after command pass | `internal_error` / `0` | `degraded` | `4` |
 | Extraction internal error after command failure, timeout, or kill | original status / original exit code | `degraded` | original exit code |
 | Extraction internal error during standalone summarize | `internal_error` / `4` | `degraded` | `4` |

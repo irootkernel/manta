@@ -20,23 +20,25 @@ type lineIndex struct {
 	text  string
 	start int
 	end   int
+	line  int
 }
 
 func Process(raw []byte, run model.RunOutput, rules []model.Rule) (model.RunOutput, error) {
-	return process(raw, run, rules, true)
+	return process(string(raw), run, rules, true)
 }
 
 // ProcessRules extracts evidence only from the supplied rules.
 func ProcessRules(raw []byte, run model.RunOutput, rules []model.Rule) (model.RunOutput, error) {
-	return process(raw, run, rules, false)
-}
-
-func process(raw []byte, run model.RunOutput, rules []model.Rule, parserFallback bool) (model.RunOutput, error) {
 	text := string(raw)
 	if err := safety.EnsureInputWithinLimit(text); err != nil {
 		return run, err
 	}
-	lines := buildLineIndex(text)
+	return process(text, run, rules, false)
+}
+
+func process(text string, run model.RunOutput, rules []model.Rule, parserFallback bool) (model.RunOutput, error) {
+	scan, startByte, lineOffset, truncated := boundedTail(text)
+	lines := buildLineIndex(scan, startByte, lineOffset)
 	failures := applyRules(lines, text, rules)
 	if len(failures) == 0 && parserFallback {
 		failures = parserFailures(run.Metadata.Parser, lines, text)
@@ -51,25 +53,45 @@ func process(raw []byte, run model.RunOutput, rules []model.Rule, parserFallback
 	}
 	run.Failures = failures
 	run.Warnings = warnings
-	run.ExtractorStatus = extractorStatus(run.Status, failures)
+	run.ExtractorStatus = extractorStatus(run.Status, failures, truncated)
 	return run, nil
 }
 
-func buildLineIndex(text string) []lineIndex {
+func boundedTail(text string) (string, int, int, bool) {
+	if len(text) <= safety.MaxRegexInputBytes {
+		return text, 0, 0, false
+	}
+
+	start := len(text) - safety.MaxRegexInputBytes
+	if text[start-1] != '\n' {
+		if newline := strings.IndexByte(text[start:], '\n'); newline >= 0 {
+			start += newline + 1
+		} else {
+			start = len(text)
+		}
+	}
+	lineOffset := strings.Count(text[:start], "\n")
+	return text[start:], start, lineOffset, true
+}
+
+func buildLineIndex(text string, startByte, lineOffset int) []lineIndex {
+	if text == "" && startByte > 0 {
+		return nil
+	}
 	parts := strings.SplitAfter(text, "\n")
 	if len(parts) == 0 {
 		return nil
 	}
 	lines := make([]lineIndex, 0, len(parts))
-	offset := 0
-	for _, part := range parts {
+	offset := startByte
+	for idx, part := range parts {
 		trimmed := strings.TrimSuffix(part, "\n")
-		lines = append(lines, lineIndex{text: strings.TrimSuffix(trimmed, "\r"), start: offset, end: offset + len(trimmed)})
+		lines = append(lines, lineIndex{text: strings.TrimSuffix(trimmed, "\r"), start: offset, end: offset + len(trimmed), line: lineOffset + idx + 1})
 		offset += len(part)
 	}
 	if len(text) > 0 && !strings.HasSuffix(text, "\n") {
 		last := lines[len(lines)-1]
-		last.end = len(text)
+		last.end = startByte + len(text)
 		lines[len(lines)-1] = last
 	}
 	return lines
@@ -173,7 +195,10 @@ func genericWarnings(lines []lineIndex) []model.Warning {
 	return warnings
 }
 
-func extractorStatus(status model.RunStatus, failures []model.Failure) model.ExtractorStatus {
+func extractorStatus(status model.RunStatus, failures []model.Failure, truncated bool) model.ExtractorStatus {
+	if truncated {
+		return model.ExtractorStatusDegraded
+	}
 	if len(failures) == 0 {
 		if status == model.RunStatusFailed || status == model.RunStatusTimedOut || status == model.RunStatusKilled {
 			return model.ExtractorStatusDegraded
@@ -194,7 +219,7 @@ func extractorStatus(status model.RunStatus, failures []model.Failure) model.Ext
 }
 
 func spanFor(lines []lineIndex, startLine, endLine int) model.RawSpan {
-	return model.RawSpan{StartLine: startLine + 1, EndLine: endLine + 1, StartByte: lines[startLine].start, EndByte: lines[endLine].end}
+	return model.RawSpan{StartLine: lines[startLine].line, EndLine: lines[endLine].line, StartByte: lines[startLine].start, EndByte: lines[endLine].end}
 }
 
 func joinLines(lines []lineIndex) string {

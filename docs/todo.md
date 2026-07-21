@@ -1,6 +1,6 @@
 # Manta Todo
 
-Status: 9 open items from the v0.1.4 release-readiness review
+Status: 8 open items from the v0.1.4 release-readiness review
 Scope: Documentation and implementation follow-up notes
 
 ## Todo status legend
@@ -16,13 +16,6 @@ Tag and publish `v0.1.4` only after the items below are closed and the release-r
 ## Open items
 
 Items are listed in recommended fix order. Line references were verified against the current tree and may drift as fixes land.
-
-### RELRV-001 `Open` — Oversized raw logs must degrade, not become internal errors
-
-- Severity: high (empirically reproduced).
-- Problem: extraction checks the entire raw log against `safety.MaxRegexInputBytes` (256 KiB) and fails the whole evidence pipeline when the log is larger. A passing command with ~300 KB of output ends as `status: internal_error` with CLI exit `4`; verbose real-world runners (pytest, vitest, playwright, monorepo suites) cross 256 KiB routinely.
-- Evidence: `internal/extract/extract.go:35-38`; `internal/safety/text.go:11-16`.
-- Done when: oversized logs are processed through an explicit bounded strategy (for example a bounded window or tail scan) so a passing oversized run stays `passed` / exit `0` with a documented extractor status; the extraction policy table and docs are updated; tests cover oversized passing and failing runs. `MANTA-REQ-RQSEC-004` still holds — bounds remain, only the failure mode changes.
 
 ### RELRV-002 `Open` — Cap failure/warning counts so summaries stay writable
 

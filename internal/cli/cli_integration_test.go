@@ -869,7 +869,7 @@ func TestAdHocRunWithoutConfig(t *testing.T) {
 	}
 }
 
-func TestRawLogPersistsWhenExtractionFails(t *testing.T) {
+func TestOversizedFailedRunPreservesRawLog(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(repo, ".manta", "tester"), 0o755); err != nil {
@@ -899,8 +899,8 @@ func TestRawLogPersistsWhenExtractionFails(t *testing.T) {
 	if !strings.Contains(stdout.String(), "Status: failed") || !strings.Contains(stdout.String(), "Exit code: 1") {
 		t.Fatalf("expected failed result with original command exit, got %q", stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "regex input bound") {
-		t.Fatalf("expected extraction diagnostic on stderr, got %q", stderr.String())
+	if stderr.Len() != 0 {
+		t.Fatalf("expected no extraction diagnostic, got %q", stderr.String())
 	}
 	runsDir := filepath.Join(repo, ".manta", "runs", "standalone")
 	entries, err := os.ReadDir(runsDir)
@@ -908,41 +908,9 @@ func TestRawLogPersistsWhenExtractionFails(t *testing.T) {
 		t.Fatalf("expected one run directory, err=%v entries=%d", err, len(entries))
 	}
 	runDir := filepath.Join(runsDir, entries[0].Name())
-	rawLogPath := filepath.Join(runDir, "huge.raw.log")
-	info, err := os.Stat(rawLogPath)
-	if err != nil {
-		t.Fatalf("expected raw log to persist despite extraction failure: %v", err)
-	}
-	if info.Size() == 0 {
+	raw := assertDegradedArtifacts(t, runDir, "huge", model.RunStatusFailed, 1)
+	if len(raw) == 0 {
 		t.Fatal("expected non-empty raw log artifact")
-	}
-	summaryData, err := os.ReadFile(filepath.Join(runDir, "huge.summary.json"))
-	if err != nil {
-		t.Fatalf("expected summary json to be written with degraded extraction: %v", err)
-	}
-	var summary model.Summary
-	if err := json.Unmarshal(summaryData, &summary); err != nil {
-		t.Fatal(err)
-	}
-	if summary.Status != model.RunStatusFailed || summary.ExtractorStatus != model.ExtractorStatusDegraded {
-		t.Fatalf("expected failed/degraded summary, got status=%s extractor=%s", summary.Status, summary.ExtractorStatus)
-	}
-	if summary.ExitCode != 1 || summary.FailureCount != 0 || summary.WarningCount != 0 {
-		t.Fatalf("expected retained exit and empty compressed evidence, got exit=%d failures=%d warnings=%d", summary.ExitCode, summary.FailureCount, summary.WarningCount)
-	}
-	statusData, err := os.ReadFile(filepath.Join(runDir, "huge.status.json"))
-	if err != nil {
-		t.Fatalf("expected status json to be written with degraded extraction: %v", err)
-	}
-	var status model.Status
-	if err := json.Unmarshal(statusData, &status); err != nil {
-		t.Fatal(err)
-	}
-	if status.Status != model.RunStatusFailed || status.ExitCode != 1 || status.ExtractorStatus != model.ExtractorStatusDegraded {
-		t.Fatalf("expected failed/degraded status, got status=%s exit=%d extractor=%s", status.Status, status.ExitCode, status.ExtractorStatus)
-	}
-	if status.StatusHash != artifacts.ComputeStatusHash(status) {
-		t.Fatalf("status hash mismatch: got %q", status.StatusHash)
 	}
 }
 

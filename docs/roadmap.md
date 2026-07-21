@@ -1,7 +1,7 @@
 # Manta Roadmap
 
-Status: v0.1 standalone MVP, HARDE hardening epic, and `TAGS-001` complete
-Scope: Implementation tracking for the Manta v0.1 standalone baseline, post-baseline hardening, and schema-v2 tag migration
+Status: v0.1 standalone MVP, HARDE hardening epic, `TAGS-001`, and `RELRV-001` complete
+Scope: Implementation tracking for the Manta v0.1 standalone baseline, post-baseline hardening, schema-v2 tag migration, and release-readiness follow-up
 
 This roadmap is a delivery record, not an operator guide or a promise that out-of-scope capabilities will be added. See the [integration guide](integration-guide.md) for the current supported/unsupported capability boundary and `todo.md` for explicitly accepted open work.
 
@@ -10,7 +10,7 @@ Task status values: `Planned`, `In Progress`, `Blocked`, `Done`, `Deferred`.
 Existing `Done` entries record completion of the original v0.1 implementation slices. They do not supersede or satisfy the later `HARDE` tasks, which close correctness, safety, verification, and documentation gaps found during repository review.
 
 Current implementation snapshot:
-- `Done`: `SETUP-001` to `SETUP-003`, `RUNNR-001` to `RUNNR-003`, `ARTIF-001` to `ARTIF-003`, `PARSE-001` to `PARSE-003`, `SAFEY-001` to `SAFEY-003`, `CLIUX-001`, `CLIUX-002`, `RULES-001` to `RULES-003`, `DOCUM-001` to `DOCUM-003`, `HARDE-001` to `HARDE-007`, `TAGS-001`
+- `Done`: `SETUP-001` to `SETUP-003`, `RUNNR-001` to `RUNNR-003`, `ARTIF-001` to `ARTIF-003`, `PARSE-001` to `PARSE-003`, `SAFEY-001` to `SAFEY-003`, `CLIUX-001`, `CLIUX-002`, `RULES-001` to `RULES-003`, `DOCUM-001` to `DOCUM-003`, `HARDE-001` to `HARDE-007`, `TAGS-001`, `RELRV-001`
 - `In Progress`: none
 - `Deferred`: none
 - `Planned`: none
@@ -97,3 +97,11 @@ These tasks were implemented as separate, reviewable units in numerical order. A
 | Task ID | Status | Goal | Reference |
 |---|---|---|---|
 | TAGS-001 | Done | Replace the single execution grouping label with canonical multi-value tags across schema v2, CLI, rule selection, artifacts, watcher hashes, tests, and documentation. | `MANTA-REQ-RQCLI-003`, `MANTA-REQ-RQCFG-003`, `MANTA-REQ-RQRUL-008`, `MANTA-REQ-RQWAT-002` |
+
+## RELRV: v0.1.4 release-readiness follow-up
+
+Completed release-readiness findings are retained here; remaining accepted findings stay in `todo.md`. A completed item records its development gate only and does not claim release, tag, or final review acceptance.
+
+| Task ID | Status | Goal | Verification | Reference |
+|---|---|---|---|---|
+| RELRV-001 | Done | Process oversized runtime and summarize logs through a bounded complete-line tail without converting passing commands into internal errors, while preserving full raw evidence and absolute spans. | Cover boundary handling, runtime rules, specialized parsers, passing/failing/summarize artifacts, command exits, hashes, and excerpts; pass the full release-style test suite. | `MANTA-REQ-RQEXT-003`, `MANTA-REQ-RQEXT-005`, `MANTA-REQ-RQEXT-007`, `MANTA-REQ-RQSEC-004`, `ADR-0002`, `ADR-0007` |

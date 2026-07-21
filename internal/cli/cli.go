@@ -46,6 +46,8 @@ type runResult struct {
 
 type materializationSource uint8
 
+type extractionProcessor func([]byte, model.RunOutput, []model.Rule) (model.RunOutput, error)
+
 const (
 	materializationExecutedCommand materializationSource = iota
 	materializationSummarizedRaw
@@ -349,7 +351,11 @@ func executeSummarize(req model.RunRequest, rawLogArg string) (runResult, int, e
 }
 
 func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.ArtifactPaths, rawSHA, relRaw string, runOutput model.RunOutput, applicableRules []model.Rule, source materializationSource) (runResult, model.RunOutput, error) {
-	runOutput, extractionErr := extract.Process(runOutput.RawLogBytes, runOutput, applicableRules)
+	return materializeArtifactsWithExtractor(req, cfg, paths, rawSHA, relRaw, runOutput, applicableRules, source, extract.Process)
+}
+
+func materializeArtifactsWithExtractor(req model.RunRequest, cfg model.Config, paths model.ArtifactPaths, rawSHA, relRaw string, runOutput model.RunOutput, applicableRules []model.Rule, source materializationSource, extractor extractionProcessor) (runResult, model.RunOutput, error) {
+	runOutput, extractionErr := extractor(runOutput.RawLogBytes, runOutput, applicableRules)
 	if extractionErr != nil {
 		runOutput.Failures = nil
 		runOutput.Warnings = nil

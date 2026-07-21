@@ -143,13 +143,14 @@ Rules, redaction, and extraction all depend on regex, but regex safety must not 
 
 ### Decision
 
-Manta uses Go `regexp` with RE2 semantics only. Unsupported or invalid regex fails closed. Safety is reinforced with explicit bounds on regex input size, extracted block size, excerpt size, and summary size.
+Manta uses Go `regexp` with RE2 semantics only. Unsupported or invalid regex fails closed. Safety is reinforced with explicit bounds on regex input size, extracted block size, excerpt size, and summary size. For runtime and summarize operations, extraction scans at most the final 256 KiB of complete lines and reports degraded evidence when the raw log is larger; rule fixture testing fails closed instead because it must inspect the complete fixture.
 
 ### Consequences
 
 - Catastrophic-backtracking-style regex behavior is avoided by construction.
 - PCRE-only features are out of scope for project-local rules.
 - Validation and documentation can state a crisp supported-regex surface.
+- Oversized runtime logs remain usable without weakening the input bound or changing authoritative command results.
 
 ## ADR-0008: First runnable slice requires only the generic parser
 

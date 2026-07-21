@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,16 +15,22 @@ import (
 	"github.com/irootkernel/manta/internal/safety"
 )
 
-func TestMaterializeArtifactsExtractionErrorRetainsNonPassRunState(t *testing.T) {
+func TestMaterializeArtifactsExtractionErrorContract(t *testing.T) {
 	t.Parallel()
+	// Inject failures so the documented artifact contract remains covered independently of current extractor error triggers.
 	tests := []struct {
-		name     string
-		status   model.RunStatus
-		exitCode int
+		name         string
+		status       model.RunStatus
+		exitCode     int
+		source       materializationSource
+		wantStatus   model.RunStatus
+		wantExitCode int
 	}{
-		{name: "failed", status: model.RunStatusFailed, exitCode: 7},
-		{name: "timed-out", status: model.RunStatusTimedOut, exitCode: int(model.ExitCodeTimeout)},
-		{name: "killed", status: model.RunStatusKilled, exitCode: 143},
+		{name: "failed", status: model.RunStatusFailed, exitCode: 7, source: materializationExecutedCommand, wantStatus: model.RunStatusFailed, wantExitCode: 7},
+		{name: "timed-out", status: model.RunStatusTimedOut, exitCode: int(model.ExitCodeTimeout), source: materializationExecutedCommand, wantStatus: model.RunStatusTimedOut, wantExitCode: int(model.ExitCodeTimeout)},
+		{name: "killed", status: model.RunStatusKilled, exitCode: 143, source: materializationExecutedCommand, wantStatus: model.RunStatusKilled, wantExitCode: 143},
+		{name: "passed", status: model.RunStatusPassed, exitCode: 0, source: materializationExecutedCommand, wantStatus: model.RunStatusInternalErr, wantExitCode: 0},
+		{name: "summarized", status: model.RunStatusPassed, exitCode: 0, source: materializationSummarizedRaw, wantStatus: model.RunStatusInternalErr, wantExitCode: int(model.ExitCodeParserError)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -33,7 +41,7 @@ func TestMaterializeArtifactsExtractionErrorRetainsNonPassRunState(t *testing.T)
 			if err != nil {
 				t.Fatal(err)
 			}
-			raw := []byte(strings.Repeat("x", safety.MaxRegexInputBytes+1))
+			raw := []byte("raw evidence\n")
 			rawSHA, err := artifacts.WriteRawLog(paths, raw)
 			if err != nil {
 				t.Fatal(err)
@@ -48,7 +56,7 @@ func TestMaterializeArtifactsExtractionErrorRetainsNonPassRunState(t *testing.T)
 				Status:      tt.status,
 				RawLogBytes: raw,
 			}
-			result, processed, err := materializeArtifacts(
+			result, processed, err := materializeArtifactsWithExtractor(
 				req,
 				model.Config{},
 				paths,
@@ -56,26 +64,29 @@ func TestMaterializeArtifactsExtractionErrorRetainsNonPassRunState(t *testing.T)
 				artifacts.Rel(repo, paths.RawLogPath),
 				runOutput,
 				nil,
-				materializationExecutedCommand,
+				tt.source,
+				func(_ []byte, output model.RunOutput, _ []model.Rule) (model.RunOutput, error) {
+					return output, errors.New("forced extraction failure")
+				},
 			)
 			if err != nil {
 				t.Fatalf("materializeArtifacts failed: %v", err)
 			}
-			if processed.Status != tt.status || processed.Metadata.ExitCode != tt.exitCode {
-				t.Fatalf("expected retained status/exit %s/%d, got %s/%d", tt.status, tt.exitCode, processed.Status, processed.Metadata.ExitCode)
+			if processed.Status != tt.wantStatus || processed.Metadata.ExitCode != tt.wantExitCode {
+				t.Fatalf("expected status/exit %s/%d, got %s/%d", tt.wantStatus, tt.wantExitCode, processed.Status, processed.Metadata.ExitCode)
 			}
 			if processed.ExtractorStatus != model.ExtractorStatusDegraded {
 				t.Fatalf("expected degraded extraction, got %s", processed.ExtractorStatus)
 			}
-			if !strings.Contains(result.diagnostic, "regex input bound") {
+			if !strings.Contains(result.diagnostic, "forced extraction failure") {
 				t.Fatalf("expected extraction diagnostic, got %q", result.diagnostic)
 			}
-			assertExtractionErrorArtifacts(t, paths.BaseDir, tt.name, tt.status, tt.exitCode)
+			assertDegradedArtifacts(t, paths.BaseDir, tt.name, tt.wantStatus, tt.wantExitCode)
 		})
 	}
 }
 
-func TestRunInternalErrorAfterPassedCommandMaterializesArtifacts(t *testing.T) {
+func TestOversizedPassingRunUsesBoundedExtraction(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(repo, ".manta"), 0o755); err != nil {
@@ -103,16 +114,16 @@ func TestRunInternalErrorAfterPassedCommandMaterializesArtifacts(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	exitCode := Main([]string{"--repo", repo, "--run-id", "passed-internal-error", "--json", "run", "huge-pass"}, &stdout, &stderr)
-	if exitCode != int(model.ExitCodeParserError) {
-		t.Fatalf("expected Manta parser exit %d, got %d stderr=%s", model.ExitCodeParserError, exitCode, stderr.String())
+	exitCode := Main([]string{"--repo", repo, "--run-id", "oversized-pass", "--json", "run", "huge-pass"}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("expected passing command exit 0, got %d stderr=%s", exitCode, stderr.String())
 	}
 	var result runResult
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("decode run result %q: %v", stdout.String(), err)
 	}
-	if result.Status != model.RunStatusInternalErr || result.ExitCode != 0 || result.Extractor != string(model.ExtractorStatusDegraded) {
-		t.Fatalf("expected materialized internal-error result with command exit 0, got %+v", result)
+	if result.Status != model.RunStatusPassed || result.ExitCode != 0 || result.Extractor != string(model.ExtractorStatusDegraded) {
+		t.Fatalf("expected passed/degraded result with command exit 0, got %+v", result)
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(stdout.Bytes(), &fields); err != nil {
@@ -123,15 +134,18 @@ func TestRunInternalErrorAfterPassedCommandMaterializesArtifacts(t *testing.T) {
 			t.Fatalf("internal diagnostic must not add JSON field %q", field)
 		}
 	}
-	if !strings.Contains(stderr.String(), "regex input bound") {
-		t.Fatalf("expected extraction diagnostic on stderr, got %q", stderr.String())
+	if stderr.Len() != 0 {
+		t.Fatalf("expected no extraction diagnostic, got %q", stderr.String())
 	}
 
-	baseDir := filepath.Join(repo, ".manta", "runs", "scoped", "passed-internal-error", "artifacts", "test")
-	assertExtractionErrorArtifacts(t, baseDir, "huge-pass", model.RunStatusInternalErr, 0)
+	baseDir := filepath.Join(repo, ".manta", "runs", "scoped", "oversized-pass", "artifacts", "test")
+	copiedRaw := assertDegradedArtifacts(t, baseDir, "huge-pass", model.RunStatusPassed, 0)
+	if !bytes.Equal(copiedRaw, raw) {
+		t.Fatal("expected run to preserve the original raw bytes")
+	}
 }
 
-func TestSummarizeInternalErrorMaterializesArtifacts(t *testing.T) {
+func TestOversizedSummarizeUsesBoundedExtraction(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name             string
@@ -167,19 +181,19 @@ func TestSummarizeInternalErrorMaterializesArtifacts(t *testing.T) {
 			}
 
 			var stdout, stderr bytes.Buffer
-			exitCode := Main([]string{"--repo", repo, "--run-id", "summarize-internal-error-" + tt.name, "summarize", rawPath}, &stdout, &stderr)
-			if exitCode != int(model.ExitCodeParserError) {
-				t.Fatalf("expected Manta parser exit %d, got %d stderr=%s", model.ExitCodeParserError, exitCode, stderr.String())
+			exitCode := Main([]string{"--repo", repo, "--run-id", "oversized-summarize-" + tt.name, "summarize", rawPath}, &stdout, &stderr)
+			if exitCode != 0 {
+				t.Fatalf("expected summarize exit 0, got %d stderr=%s", exitCode, stderr.String())
 			}
-			if !strings.Contains(stdout.String(), "Status: internal_error") || !strings.Contains(stdout.String(), "Exit code: 4") {
-				t.Fatalf("expected summarized internal-error result with exit 4, got %q", stdout.String())
+			if !strings.Contains(stdout.String(), "Status: "+string(tt.inferredStatus)) || !strings.Contains(stdout.String(), fmt.Sprintf("Exit code: %d", tt.inferredExitCode)) || !strings.Contains(stdout.String(), "Extractor: degraded") {
+				t.Fatalf("expected bounded summarize result, got %q", stdout.String())
 			}
-			if !strings.Contains(stderr.String(), "regex input bound") {
-				t.Fatalf("expected extraction diagnostic on stderr, got %q", stderr.String())
+			if stderr.Len() != 0 {
+				t.Fatalf("expected no extraction diagnostic, got %q", stderr.String())
 			}
 
-			baseDir := filepath.Join(repo, ".manta", "runs", "scoped", "summarize-internal-error-"+tt.name, "artifacts", "test")
-			copiedRaw := assertExtractionErrorArtifacts(t, baseDir, "unit", model.RunStatusInternalErr, int(model.ExitCodeParserError))
+			baseDir := filepath.Join(repo, ".manta", "runs", "scoped", "oversized-summarize-"+tt.name, "artifacts", "test")
+			copiedRaw := assertDegradedArtifacts(t, baseDir, "unit", tt.inferredStatus, tt.inferredExitCode)
 			if !bytes.Equal(copiedRaw, tt.raw) {
 				t.Fatal("expected summarize to preserve the original raw bytes")
 			}
@@ -187,7 +201,7 @@ func TestSummarizeInternalErrorMaterializesArtifacts(t *testing.T) {
 	}
 }
 
-func assertExtractionErrorArtifacts(t *testing.T, baseDir, commandID string, wantStatus model.RunStatus, wantExitCode int) []byte {
+func assertDegradedArtifacts(t *testing.T, baseDir, commandID string, wantStatus model.RunStatus, wantExitCode int) []byte {
 	t.Helper()
 	summaryPath := filepath.Join(baseDir, commandID+".summary.json")
 	statusPath := filepath.Join(baseDir, commandID+".status.json")
@@ -204,7 +218,7 @@ func assertExtractionErrorArtifacts(t *testing.T, baseDir, commandID string, wan
 		t.Fatalf("unexpected summary contract: status=%s exit=%d extractor=%s", summary.Status, summary.ExitCode, summary.ExtractorStatus)
 	}
 	if summary.FailureCount != 0 || summary.WarningCount != 0 || len(summary.Failures) != 0 || len(summary.Warnings) != 0 {
-		t.Fatalf("expected empty compressed evidence after extraction error, got %+v", summary)
+		t.Fatalf("expected empty degraded evidence, got %+v", summary)
 	}
 
 	var status model.Status

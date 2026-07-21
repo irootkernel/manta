@@ -170,7 +170,7 @@ Add `--json` when a script needs compact command output. Use `--repo`, `--config
 ## Safe defaults
 
 - The executed command's exit code is authoritative.
-- Summaries and excerpts are bounded; raw logs are preserved unchanged.
+- Summaries and excerpts are bounded; raw logs are preserved unchanged. Logs larger than 256 KiB use degraded extraction from a bounded complete-line tail instead of becoming internal errors.
 - Redaction applies to surfaced summaries, excerpts, status, and console metadata, not to raw logs or literal artifact paths.
 - Do not put secrets in run IDs, command IDs, output directories, or filenames.
 - Ignore the entire `.manta/` directory. Config, rules, toolchain metadata, proposals, and evidence are local-only state.

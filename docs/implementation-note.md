@@ -1,7 +1,7 @@
 # Manta Implementation Note
 
-Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, and `TAGS-001` complete
-Scope: Maintainer guidance for the standalone Manta v0.1 implementation, schema-v2 tags, and future changes
+Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, `TAGS-001`, and `RELRV-001` complete
+Scope: Maintainer guidance for the standalone Manta v0.1 implementation, schema-v2 tags, release-readiness follow-up, and future changes
 
 This document explains implementation constraints and verification expectations for contributors. It is not the parent-project adoption contract; integrators should start with the [integration guide](integration-guide.md).
 
@@ -87,10 +87,12 @@ Extractor status guidance:
 
 - `precise`: every accepted failure span has a file or test name.
 - `partial`: at least one accepted failure span has neither a file nor a test name.
-- `degraded`: a failed, timed-out, or killed command has no accepted failure span, or extraction failed internally.
+- `degraded`: a failed, timed-out, or killed command has no accepted failure span, extraction failed internally, or extraction inspected only a bounded tail of an oversized raw log.
 - `no_match`: a passing command has no accepted failure span and extraction completed without an internal error; warnings may still be present.
 
 Extraction internal errors follow the artifact/CLI matrix in `architecture.md`. When artifact writes remain safe, Manta preserves raw evidence and materializes empty degraded evidence; bounded, redacted diagnostics go to stderr rather than the JSON schemas.
+
+For execution and summarize logs larger than 256 KiB, extraction uses the final 256 KiB beginning at the first complete line. It preserves absolute line and byte offsets into the full raw log and always reports `degraded`, including when the retained tail contains a precise match. An oversized unbroken line has no complete tail line to inspect. Rule-only `rules test` extraction remains fail closed above 256 KiB so overmatch validation is never based on a partial fixture.
 
 ## Fixture-backed parser examples
 
@@ -147,7 +149,7 @@ Validation rejects unknown YAML fields, extra YAML documents, missing IDs or pro
 
 - Use Go `regexp` with RE2 semantics only.
 - Do not support PCRE-only features or backtracking-dependent behavior.
-- Bound regex input size before matching.
+- Bound regex input size before matching; use the bounded complete-line tail for runtime and summarize extraction, and reject oversized rule-test fixtures.
 - Bound extracted block lines, excerpt bytes, and summary bytes independently of regex success.
 - Fail closed on invalid or unsupported regex.
 
@@ -185,7 +187,8 @@ Tests should cover:
 - Internal symlinks whose canonical targets remain inside the applicable boundary continuing to work.
 - Specialized parser fixtures for `vitest`, `pytest`, `go-test`, and `playwright`.
 - Specialized parser misses with generic-looking markers, covering `no_match` for pass and `degraded` for failed, timed-out, and killed states without generic fallback, including a built-binary E2E probe.
-- Extraction internal errors after pass, failure, timeout, kill, and standalone summarize, including built-binary run/summarize probes for preserved raw evidence, summary/status hashes, Markdown output, and CLI exit behavior.
+- Extraction internal errors after pass, failure, timeout, kill, and standalone summarize at the artifact-materialization boundary.
+- Oversized passing, failing, and summarize logs using bounded-tail extraction, including built-binary probes for preserved raw evidence, summary/status hashes, Markdown output, absolute spans, and CLI exit behavior.
 - Exact generated Markdown shape for a fixed summary, plus a built-binary fresh-fixture workflow covering version, configured/ad-hoc run, summarize, excerpt, JSON output, and the complete rule lifecycle.
 - Unsupported historical `--verbose` and `--no-color` placeholders failing closed with config exit code `2`.
 - Actual `make install` and `make install-toolchain` execution in isolated temporary roots, including installed-version and resolver checks.

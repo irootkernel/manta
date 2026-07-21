@@ -197,6 +197,7 @@ Important cases:
 
 - A failed, timed-out, or killed command stays non-pass even if extraction is `degraded`.
 - A specialized-parser miss after a passing command is `passed` plus `no_match`.
+- A raw log larger than 256 KiB is extracted from a bounded complete-line tail and reports `degraded`; a passing command still remains `passed` with exit code `0`.
 - An extraction internal error after a passing command leaves artifact `exit_code: 0`, sets artifact `status: internal_error`, and makes Manta exit `4`.
 - `summarize` has no authoritative process result; inferred status is evidence interpretation only.
 

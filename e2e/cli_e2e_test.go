@@ -281,10 +281,10 @@ func TestBinaryExtractionContracts(t *testing.T) {
 			t.Fatalf("expected no diagnostic for a parser miss, got %q", stderr)
 		}
 		summary, status, _ := loadBinaryRunArtifacts(t, repo, result)
-		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusFailed, 7)
+		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusFailed, 7, 0)
 	})
 
-	t.Run("passing command extraction error preserves command exit", func(t *testing.T) {
+	t.Run("oversized passing command uses bounded extraction", func(t *testing.T) {
 		repo := t.TempDir()
 		writeE2EConfig(t, repo, "#!/bin/sh\ncat huge.raw.log\nexit 0\n")
 		raw := bytes.Repeat([]byte("x"), safety.MaxRegexInputBytes+1)
@@ -292,19 +292,52 @@ func TestBinaryExtractionContracts(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		result, stderr := runBinaryJSONWithExit(t, bin, repo, int(model.ExitCodeParserError), "run", "unit")
-		if !strings.Contains(stderr, "regex input bound") {
-			t.Fatalf("expected bounded extraction diagnostic, got %q", stderr)
+		result, stderr := runBinaryJSONWithExit(t, bin, repo, 0, "run", "unit")
+		if stderr != "" {
+			t.Fatalf("expected no extraction diagnostic, got %q", stderr)
 		}
 		summary, status, copiedRaw := loadBinaryRunArtifacts(t, repo, result)
 		if !bytes.Equal(copiedRaw, raw) {
-			t.Fatal("passing-command internal error did not preserve raw evidence")
+			t.Fatal("oversized passing command did not preserve raw evidence")
 		}
-		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusInternalErr, 0)
-		assertBinaryMarkdownContract(t, repo, result, "internal_error", "0", "degraded")
+		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusPassed, 0, 0)
+		assertBinaryMarkdownContract(t, repo, result, "passed", "0", "degraded")
 	})
 
-	t.Run("summarize extraction error materializes internal error", func(t *testing.T) {
+	t.Run("oversized failing command retains command result", func(t *testing.T) {
+		repo := t.TempDir()
+		writeE2EConfig(t, repo, "#!/bin/sh\ncat huge.raw.log\nexit 7\n")
+		prefix := bytes.Repeat([]byte("noise line\n"), safety.MaxRegexInputBytes/10)
+		raw := append(prefix, []byte("TypeError: boom\nsrc/foo.test.ts:42:13\n- renders empty state\n")...)
+		if err := os.WriteFile(filepath.Join(repo, "huge.raw.log"), raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		result, stderr := runBinaryJSONWithExit(t, bin, repo, 7, "run", "unit")
+		if stderr != "" {
+			t.Fatalf("expected no extraction diagnostic, got %q", stderr)
+		}
+		summary, status, copiedRaw := loadBinaryRunArtifacts(t, repo, result)
+		if !bytes.Equal(copiedRaw, raw) {
+			t.Fatal("oversized failing command did not preserve raw evidence")
+		}
+		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusFailed, 7, 1)
+		failure := summary.Failures[0]
+		if want := bytes.Count(raw[:failure.RawSpan.StartByte], []byte{'\n'}) + 1; failure.RawSpan.StartLine != want {
+			t.Fatalf("failure start line = %d, want absolute line %d", failure.RawSpan.StartLine, want)
+		}
+		excerptPath := filepath.Join(repo, filepath.Dir(filepath.FromSlash(status.SummaryPath)), filepath.FromSlash(failure.Excerpt))
+		excerpt, err := os.ReadFile(excerptPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Contains(excerpt, []byte("TypeError: boom")) {
+			t.Fatalf("expected tail failure excerpt, got %q", excerpt)
+		}
+		assertBinaryMarkdownContract(t, repo, result, "failed", "7", "degraded")
+	})
+
+	t.Run("oversized summarize uses bounded extraction", func(t *testing.T) {
 		repo := t.TempDir()
 		raw := bytes.Repeat([]byte("y"), safety.MaxRegexInputBytes+1)
 		rawPath := filepath.Join(repo, "unit.raw.log")
@@ -312,16 +345,16 @@ func TestBinaryExtractionContracts(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		result, stderr := runBinaryJSONWithExit(t, bin, repo, int(model.ExitCodeParserError), "summarize", filepath.ToSlash(rawPath))
-		if !strings.Contains(stderr, "regex input bound") {
-			t.Fatalf("expected bounded summarize diagnostic, got %q", stderr)
+		result, stderr := runBinaryJSONWithExit(t, bin, repo, 0, "summarize", filepath.ToSlash(rawPath))
+		if stderr != "" {
+			t.Fatalf("expected no extraction diagnostic, got %q", stderr)
 		}
 		summary, status, copiedRaw := loadBinaryRunArtifacts(t, repo, result)
 		if !bytes.Equal(copiedRaw, raw) {
-			t.Fatal("summarize internal error did not preserve copied raw evidence")
+			t.Fatal("oversized summarize did not preserve copied raw evidence")
 		}
-		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusInternalErr, int(model.ExitCodeParserError))
-		assertBinaryMarkdownContract(t, repo, result, "internal_error", "4", "degraded")
+		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusPassed, 0, 0)
+		assertBinaryMarkdownContract(t, repo, result, "passed", "0", "degraded")
 	})
 }
 
@@ -844,12 +877,12 @@ func loadBinaryRunArtifacts(t *testing.T, repo string, result binaryRunResult) (
 	return summary, status, raw
 }
 
-func assertBinaryExtractionContract(t *testing.T, result binaryRunResult, summary model.Summary, status model.Status, wantStatus model.RunStatus, wantExitCode int) {
+func assertBinaryExtractionContract(t *testing.T, result binaryRunResult, summary model.Summary, status model.Status, wantStatus model.RunStatus, wantExitCode, wantFailures int) {
 	t.Helper()
-	if result.Status != wantStatus || result.ExitCode != wantExitCode || result.Extractor != string(model.ExtractorStatusDegraded) || result.Failures != 0 {
+	if result.Status != wantStatus || result.ExitCode != wantExitCode || result.Extractor != string(model.ExtractorStatusDegraded) || result.Failures != wantFailures {
 		t.Fatalf("unexpected binary result: %+v", result)
 	}
-	if summary.Status != wantStatus || summary.ExitCode != wantExitCode || summary.ExtractorStatus != model.ExtractorStatusDegraded || summary.FailureCount != 0 || summary.WarningCount != 0 {
+	if summary.Status != wantStatus || summary.ExitCode != wantExitCode || summary.ExtractorStatus != model.ExtractorStatusDegraded || summary.FailureCount != wantFailures || summary.WarningCount != 0 {
 		t.Fatalf("unexpected binary summary: %+v", summary)
 	}
 	if status.Status != wantStatus || status.ExitCode != wantExitCode || status.ExtractorStatus != model.ExtractorStatusDegraded {
