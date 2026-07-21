@@ -96,17 +96,18 @@ func applyRules(lines []lineIndex, text string, rules []model.Rule) []model.Fail
 			if !startRE.MatchString(line.text) {
 				continue
 			}
-			before := max(0, rule.Match.IncludeContext.Before)
-			after := max(0, rule.Match.IncludeContext.After)
-			maxBlockLines := max(0, rule.Match.End.MaxBlockLines)
+			before := clamp(rule.Match.IncludeContext.Before, 0, safety.MaxBlockLines)
+			after := clamp(rule.Match.IncludeContext.After, 0, safety.MaxBlockLines)
+			maxBlockLines := clamp(rule.Match.End.MaxBlockLines, 1, safety.MaxBlockLines)
 			startLine := max(0, idx-before)
-			endLine := min(len(lines)-1, idx+maxBlockLines)
+			endLine := boundedAdd(idx, maxBlockLines-1, len(lines)-1)
 			for j := idx; j <= endLine; j++ {
 				if j > idx && (lines[j].text == "" || matchesAny(lines[j].text, endREs)) {
-					endLine = min(len(lines)-1, j+after)
+					endLine = boundedAdd(j, after, len(lines)-1)
 					break
 				}
 			}
+			endLine = min(endLine, boundedAdd(startLine, safety.MaxBlockLines-1, len(lines)-1))
 			span := spanFor(lines, startLine, endLine)
 			key := fmt.Sprintf("%d:%d", span.StartByte, span.EndByte)
 			if seen[key] {
@@ -288,4 +289,18 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func clamp(value, lower, upper int) int {
+	return min(max(value, lower), upper)
+}
+
+func boundedAdd(base, delta, upper int) int {
+	if base >= upper || delta <= 0 {
+		return min(base, upper)
+	}
+	if delta > upper-base {
+		return upper
+	}
+	return base + delta
 }

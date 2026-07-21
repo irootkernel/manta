@@ -211,6 +211,9 @@ func proposeAt(repoRoot, lane, parser, rawLogPath string, startLine, endLine int
 		base = "rule"
 	}
 	proposalID := fmt.Sprintf("%s-%s-%d-%d", parser, base, startLine, endLine)
+	contextBefore := 1
+	contextAfter := 1
+	maxMatchedLines := safety.MaxBlockLines - contextBefore - contextAfter
 	rule := model.Rule{
 		ID:     proposalID,
 		Lane:   lane,
@@ -231,9 +234,9 @@ func proposeAt(repoRoot, lane, parser, rawLogPath string, startLine, endLine int
 			Start: model.RuleRegex{Regex: startPattern},
 			End: model.RuleEnd{
 				AnyOf:         []model.RuleRegex{{Regex: `^$`}},
-				MaxBlockLines: minInt(160, maxInt(8, endLine-startLine+8)),
+				MaxBlockLines: minInt(maxMatchedLines, maxInt(8, endLine-startLine+8)),
 			},
-			IncludeContext: model.RuleContext{Before: 1, After: 1},
+			IncludeContext: model.RuleContext{Before: contextBefore, After: contextAfter},
 		},
 		Extract: model.RuleExtract{
 			FileLine: model.RuleExtractField{Regex: `(?P<file>[^\s:]+\.[A-Za-z0-9]+):(?P<line>\d+)`},

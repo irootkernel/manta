@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
 )
 
 func TestLoadApplicableFailsOnInvalidDiscoveredFutureParserRule(t *testing.T) {
@@ -92,6 +94,25 @@ func TestValidateStoredRuleRejectsInvalidContextAndStatus(t *testing.T) {
 			},
 		},
 		{
+			name: "oversized before context",
+			mutate: func(rule *model.Rule) {
+				rule.Match.IncludeContext.Before = safety.MaxBlockLines + 1
+			},
+		},
+		{
+			name: "oversized after context",
+			mutate: func(rule *model.Rule) {
+				rule.Match.IncludeContext.After = int(^uint(0) >> 1)
+			},
+		},
+		{
+			name: "total span exceeds bound",
+			mutate: func(rule *model.Rule) {
+				rule.Match.End.MaxBlockLines = safety.MaxBlockLines
+				rule.Match.IncludeContext.After = 1
+			},
+		},
+		{
 			name: "disabled without reason",
 			mutate: func(rule *model.Rule) {
 				rule.Status = model.RuleStatusDisabled
@@ -112,6 +133,17 @@ func TestValidateStoredRuleRejectsInvalidContextAndStatus(t *testing.T) {
 				t.Fatalf("expected %s to fail validation", test.name)
 			}
 		})
+	}
+}
+
+func TestValidateStoredRuleAcceptsMaximumTotalSpan(t *testing.T) {
+	t.Parallel()
+	rule := validRule("maximum-total-span")
+	rule.Match.IncludeContext.Before = 1
+	rule.Match.End.MaxBlockLines = safety.MaxBlockLines - 2
+	rule.Match.IncludeContext.After = 1
+	if err := ValidateStoredRule(rule); err != nil {
+		t.Fatalf("expected maximum total span to be valid: %v", err)
 	}
 }
 
@@ -497,6 +529,33 @@ func TestProposeWritesRunLocalProposal(t *testing.T) {
 	}
 	if proposal.Rule.Provenance.SourceSpan.StartLine != 2 || proposal.Rule.Provenance.SourceSpan.EndLine != 4 {
 		t.Fatalf("unexpected proposal span %+v", proposal.Rule.Provenance.SourceSpan)
+	}
+}
+
+func TestProposeReservesContextFromSpanBudget(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	rawPath := filepath.Join(repo, "fixtures", "long.raw.log")
+	if err := os.MkdirAll(filepath.Dir(rawPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lines := make([]string, safety.MaxBlockLines)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("line-%d", i+1)
+	}
+	if err := os.WriteFile(rawPath, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	proposal, err := Propose(repo, "unit", "generic", rawPath, 1, safety.MaxBlockLines)
+	if err != nil {
+		t.Fatalf("Propose failed: %v", err)
+	}
+	if got, want := proposal.Rule.Match.End.MaxBlockLines, safety.MaxBlockLines-2; got != want {
+		t.Fatalf("max_block_lines = %d, want %d", got, want)
+	}
+	if err := ValidateStoredRule(proposal.Rule); err != nil {
+		t.Fatalf("generated proposal must remain valid: %v", err)
 	}
 }
 

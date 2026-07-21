@@ -88,9 +88,9 @@ Implementation note: the original v0.1 roadmap is implemented. Repository review
 ## RQDOC: Documentation and operator guidance
 
 - [x] `KAT-REQ-RQDOC-001` Create initial docs for requirements, architecture, user interface, ADRs, roadmap, todo, and implementation notes.
-- [x] `KAT-REQ-RQDOC-002` Add CLI examples after the first executable implementation exists. See `todo.md#TD-DOC-001`.
-- [x] `KAT-REQ-RQDOC-003` Add parser/rule examples based on real fixture logs. See `todo.md#TD-RULE-001`.
-- [x] `KAT-REQ-RQDOC-004` Add release-readiness checklist before tagging KAT v0.1.0. See `todo.md#TD-REL-001`.
+- [x] `KAT-REQ-RQDOC-002` Add CLI examples after the first executable implementation exists. See roadmap task `DOCUM-002`.
+- [x] `KAT-REQ-RQDOC-003` Add parser/rule examples based on real fixture logs. See roadmap task `RULES-003`.
+- [x] `KAT-REQ-RQDOC-004` Add release-readiness checklist before tagging KAT v0.1.0. See roadmap task `DOCUM-003`.
 
 ## RQHAR: Post-baseline hardening and contract closure
 

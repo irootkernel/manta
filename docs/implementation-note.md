@@ -77,7 +77,8 @@ Recommended generic patterns still matter for unknown output shapes:
 Span bounds:
 
 - Include small context before and after the matched marker.
-- Stop at known summary boundaries, blank-line boundaries, or `max_block_lines`.
+- Treat `max_block_lines` as the matched block size including its start line, and stop at known summary or blank-line boundaries when they occur earlier.
+- Limit the entire extracted span, including before/after context, to 160 lines.
 - Always enforce maximum lines and bytes per excerpt.
 
 Extractor status guidance:
@@ -138,7 +139,7 @@ extract:
 confidence: medium
 ```
 
-Validation rejects unknown YAML fields, extra YAML documents, missing IDs or provenance, duplicate IDs, negative context, excessive `max_block_lines`, invalid capture groups, invalid or unsupported regex, inconsistent active/disabled deletion reasons, and rule overmatch during rule-only `rules test` extraction.
+Validation rejects unknown YAML fields, extra YAML documents, missing IDs or provenance, duplicate IDs, negative or oversized context, a combined matched-block/context budget above 160 lines, excessive `max_block_lines`, invalid capture groups, invalid or unsupported regex, inconsistent active/disabled deletion reasons, and rule overmatch during rule-only `rules test` extraction.
 
 ## Regex safety guidance
 
@@ -174,6 +175,7 @@ Tests should cover:
 - Noise filtering in summary while raw log remains unchanged.
 - Rule test with expected span.
 - Rule overmatch rejection.
+- Extreme rule context values failing closed before command execution, plus defensive extraction bounds that prevent overflow or panic for unvalidated in-memory rules.
 - Artifact path generation for `.kat/`, caller-selected `--output-dir`, and `.kkachi/runs/<run_id>/...` layouts, plus built-binary rejection of external `.kat/runs` and `.kkachi/runs` symlinks before command execution.
 - Sequential, goroutine-concurrent, and cross-process standalone directory allocation within one UTC-second interval, including configured, ad-hoc, and summarize evidence preservation.
 - Invalid run, command, rule, and failure IDs failing before command execution or artifact writes.
@@ -205,7 +207,7 @@ Before the next release tag, verify all of the following:
 - artifact path and containment verification for `.kat/`, `--output-dir`, and `.kkachi/runs/<run_id>/...`, including external `.kat/runs` and `.kkachi/runs` symlink rejection
 - collision checks confirming repeated standalone operations retain distinct raw, summary, Markdown, status, and excerpt artifacts with unchanged raw-log checksums
 - watcher status JSON compatibility, including status-hash inputs
-- release notes mention known limitations, especially raw-log redaction policy and rule proposals remaining run-local until promoted
+- release notes mention known limitations, especially raw-log redaction policy, rule proposals remaining run-local until promoted, and the current platform-verification boundary
 
 ## Implementation guardrails
 

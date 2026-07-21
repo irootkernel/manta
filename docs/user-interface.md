@@ -245,6 +245,8 @@ kkachi-agent-tester rules propose --lane unit --parser generic --raw-log fixture
 kkachi-agent-tester rules delete generic-v1 --reason "superseded by v2"
 ```
 
+For project rules, `max_block_lines` counts the matched block including its start line. The matched block plus `include_context.before` and `include_context.after` must not exceed 160 lines; overbroad or overflow-sized values fail closed with config exit code `2`.
+
 ## Summarize mode notes
 
 - `summarize <raw-log>` uses the `generic` parser plus any matching project rules.

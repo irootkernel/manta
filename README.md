@@ -22,6 +22,7 @@ Important behavior:
 - raw logs are preserved as original evidence and may contain unredacted values
 - configured redaction applies to surfaced command metadata, failure/warning evidence, excerpts, status metadata, and human/JSON command output
 - artifact paths remain literal, usable references; do not place secrets in run IDs, command IDs, output directories, or other artifact-bearing paths
+- a rule's matched block plus before/after context may not exceed 160 lines; overbroad rules fail closed before execution
 
 ## Build
 
@@ -162,4 +163,4 @@ Excerpt references stored in summaries are relative to the summary directory, fo
 
 ## Documentation
 
-Detailed requirements, architecture, UI examples, roadmap, and implementation notes live under `docs/`.
+Detailed requirements, architecture, UI examples, roadmap, implementation notes, and the requirements-to-test matrix live under `docs/`.

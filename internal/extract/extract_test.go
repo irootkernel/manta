@@ -1,12 +1,14 @@
 package extract
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/model"
+	"github.com/SeventeenthEarth/kkachi-agent-tester/internal/safety"
 )
 
 func TestProcessGenericFailureProducesPreciseSpan(t *testing.T) {
@@ -131,6 +133,40 @@ func TestProcessRuleAssistedExtraction(t *testing.T) {
 	}
 	if processed.Failures[0].File != "src/foo.ts" {
 		t.Fatalf("expected rule-assisted file capture, got %+v", processed.Failures[0])
+	}
+}
+
+func TestProcessRulesBoundsUnvalidatedContext(t *testing.T) {
+	t.Parallel()
+	lines := make([]string, 200)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("line-%d", i+1)
+	}
+	lines[99] = "MARKER"
+	lines[100] = ""
+	raw := []byte(strings.Join(lines, "\n"))
+	maxInt := int(^uint(0) >> 1)
+	rule := model.Rule{
+		Match: model.RuleMatch{
+			Start:          model.RuleRegex{Regex: `^MARKER$`},
+			End:            model.RuleEnd{AnyOf: []model.RuleRegex{{Regex: `^$`}}, MaxBlockLines: safety.MaxBlockLines},
+			IncludeContext: model.RuleContext{Before: maxInt, After: maxInt},
+		},
+	}
+
+	processed, err := ProcessRules(raw, model.RunOutput{Status: model.RunStatusFailed}, []model.Rule{rule})
+	if err != nil {
+		t.Fatalf("ProcessRules failed: %v", err)
+	}
+	if len(processed.Failures) != 1 {
+		t.Fatalf("failure count = %d, want 1", len(processed.Failures))
+	}
+	span := processed.Failures[0].RawSpan
+	if got := span.EndLine - span.StartLine + 1; got != safety.MaxBlockLines {
+		t.Fatalf("bounded span lines = %d, want %d: %+v", got, safety.MaxBlockLines, span)
+	}
+	if span.StartByte < 0 || span.EndByte > len(raw) || span.StartByte >= span.EndByte {
+		t.Fatalf("invalid bounded byte span %+v for %d bytes", span, len(raw))
 	}
 }
 

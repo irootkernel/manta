@@ -1,7 +1,7 @@
 # KAT Architecture Decision Records
 
-Status: Draft
-Scope: Initial ADR index and accepted baseline decisions
+Status: Complete
+Scope: Accepted baseline decisions
 
 ## ADR status legend
 
