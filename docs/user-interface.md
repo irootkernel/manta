@@ -3,6 +3,8 @@
 Status: Complete through `HARDE-007`
 Scope: CLI-first interface for KAT v0.1
 
+This is the complete command reference. First-time users should begin with the repository [README](../README.md); parent-project owners should use the [integration guide](integration-guide.md) for ownership boundaries and adoption steps.
+
 ## Interface principles
 
 - CLI-first and script-friendly.
@@ -60,7 +62,7 @@ Recommended global options:
 | `--config <path>` | Override default `.kkachi/tester.yaml`. |
 | `--repo <path>` | Set repository root / working directory. |
 | `--output-dir <path>` | Write standalone artifacts outside `.kat/`. |
-| `--run-id <id>` | Use Kkachi-compatible `.kkachi/runs/<run_id>/...` artifact layout. |
+| `--run-id <id>` | Use the fixed `.kkachi/runs/<run_id>/...` run-scoped artifact layout. |
 | `--json` | Print compact JSON result to stdout. |
 
 Run IDs, configured command IDs, and rule IDs must match `[A-Za-z0-9][A-Za-z0-9_-]*`. Invalid identifiers fail with config exit code `2`; run identifiers are checked before the test command starts.
@@ -107,7 +109,7 @@ kat:
   binary_path: "/absolute/path/to/kkachi-agent-tester"
 ```
 
-KAS/KAH-generated `.kkachi/toolchain.yaml` may omit the `kat` block; set `KKACHI_KAT_BIN` or add explicit local KAT metadata. Treat the generated file as local state, not source documentation.
+If `.kkachi/toolchain.yaml` omits the `kat` block, set `KKACHI_KAT_BIN` or add explicit local KAT metadata. Treat machine-specific generated metadata as local state, not source documentation.
 
 ## Tested setup fixture
 
@@ -198,7 +200,6 @@ kkachi-agent-tester --config .kkachi/tester.yaml --run-id example-run run unit
 # writes .kkachi/runs/example-run/artifacts/test/unit.summary.json
 # writes .kkachi/runs/example-run/artifacts/test/unit.summary.md
 # writes .kkachi/runs/example-run/artifacts/test/unit.status.json
-# GAJAE-009 note: KAH normalizes raw KAT v0.1.0 status/summary/raw-log refs for attachment; KAT emits factual evidence only.
 # writes .kkachi/runs/example-run/artifacts/test/excerpts/F001.log
 ```
 
@@ -253,7 +254,7 @@ For project rules, `max_block_lines` counts the matched block including its star
 - When only a raw log is available, KAT infers `command_id` and `lane` from the raw-log basename. For example, `unit.raw.log` produces `command_id: unit` and `lane: unit`.
 - Because original execution metadata is unavailable, summarize infers `status` and `exit_code` from raw-log evidence. Use `run` when authoritative execution metadata is required.
 - If extraction fails internally, summarize still preserves the copied raw log and writes degraded `internal_error` summary/status artifacts with exit code `4`; the diagnostic is emitted on stderr.
-- Without `--run-id` or `--output-dir`, summarize copies the input raw log into a newly allocated `.kat/runs/<UTC-timestamp>[-NNN]/` directory and writes derived artifacts there. `--output-dir` uses the same collision-free allocation under `<output-dir>/runs/`; `--run-id` retains the fixed Kkachi-compatible layout. The original input remains unchanged.
+- Without `--run-id` or `--output-dir`, summarize copies the input raw log into a newly allocated `.kat/runs/<UTC-timestamp>[-NNN]/` directory and writes derived artifacts there. `--output-dir` uses the same collision-free allocation under `<output-dir>/runs/`; `--run-id` retains the fixed run-scoped layout. The original input remains unchanged.
 - Each summarize operation stores a complete raw-log copy in its artifact directory, so repeated summarization increases local storage usage in proportion to the source log size.
 - Summary JSON stores excerpt references relative to the summary directory, such as `excerpts/F001.log`. An absolute `--summary` input remains valid, while absolute, traversal, cross-run, dangling, and symlink-escaping embedded references fail with artifact exit code `3`.
 - Inferred `command_id` and `lane` values are redacted in summary, status, and console metadata. The copied raw-log and derived artifact references retain their literal filenames so they remain resolvable.

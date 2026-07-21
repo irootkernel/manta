@@ -145,10 +145,10 @@ func TestPreparePathsKeepsExplicitRunIDLayout(t *testing.T) {
 	}
 	want := filepath.Join(repo, ".kkachi", "runs", "run-001", "artifacts", "test")
 	if paths.BaseDir != want {
-		t.Fatalf("expected fixed Kkachi path %q, got %q", want, paths.BaseDir)
+		t.Fatalf("expected fixed run-scoped path %q, got %q", want, paths.BaseDir)
 	}
 	if _, err := os.Stat(paths.ExcerptsDir); err != nil {
-		t.Fatalf("expected prepared Kkachi directory: %v", err)
+		t.Fatalf("expected prepared run-scoped directory: %v", err)
 	}
 }
 
@@ -336,7 +336,7 @@ func TestArtifactWritesAllowInternalSymlink(t *testing.T) {
 	}
 }
 
-func TestKkachiArtifactLayout(t *testing.T) {
+func TestRunIDArtifactLayout(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
 	paths, err := PreparePaths(repo, "", "run-001", "unit")
@@ -345,17 +345,17 @@ func TestKkachiArtifactLayout(t *testing.T) {
 	}
 	expectedBase := filepath.Join(repo, ".kkachi", "runs", "run-001", "artifacts", "test")
 	if paths.BoundaryDir != repo || paths.BaseDir != expectedBase {
-		t.Fatalf("unexpected Kkachi paths %+v", paths)
+		t.Fatalf("unexpected run-scoped paths %+v", paths)
 	}
 	if _, err := WriteRawLog(paths, []byte("raw\n")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(expectedBase, "unit.raw.log")); err != nil {
-		t.Fatalf("expected Kkachi raw log: %v", err)
+		t.Fatalf("expected run-scoped raw log: %v", err)
 	}
 }
 
-func TestKkachiArtifactWritesRejectSymlinkEscape(t *testing.T) {
+func TestRunIDArtifactWritesRejectSymlinkEscape(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
 	external := t.TempDir()

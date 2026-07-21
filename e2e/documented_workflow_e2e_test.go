@@ -118,19 +118,63 @@ func TestDocumentedCLIWorkflowAgainstFreshFixture(t *testing.T) {
 	}
 
 	readme := readDocumentation(t, filepath.Join(root, "README.md"))
+	integrationGuide := readDocumentation(t, filepath.Join(root, "docs", "integration-guide.md"))
+	documentationIndex := readDocumentation(t, filepath.Join(root, "docs", "README.md"))
 	for _, want := range []string{"@v" + humanVersion, "VERSION=" + humanVersion, "/v" + humanVersion + "/bin/"} {
 		if !strings.Contains(readme, want) {
 			t.Fatalf("README does not match binary version %s: missing %q", humanVersion, want)
 		}
 	}
-	readmeRepo := t.TempDir()
-	runDocumentationBlock(t, bin, readmeRepo, 0, markdownCodeBlockAfter(t, userInterface, "## Tested setup fixture", "bash"))
-	quickExamples := markdownBashBlocksInSection(t, readme, "## Quick examples")
-	if len(quickExamples) != 5 {
-		t.Fatalf("README quick examples contain %d bash blocks, want 5", len(quickExamples))
+	for name, document := range map[string]string{
+		"integration guide":   integrationGuide,
+		"documentation index": documentationIndex,
+	} {
+		if !strings.Contains(document, "v"+humanVersion) {
+			t.Fatalf("%s does not match binary version %s", name, humanVersion)
+		}
 	}
-	for i, expectedExit := range []int{1, 1, 0, 0, 0} {
-		runDocumentationBlock(t, bin, readmeRepo, expectedExit, quickExamples[i])
+	readmeRepo := t.TempDir()
+	quickStart := markdownBashBlocksInSection(t, readme, "## Try it in five minutes")
+	if len(quickStart) != 3 {
+		t.Fatalf("README five-minute example contains %d bash blocks, want 3", len(quickStart))
+	}
+	for i, expectedExit := range []int{0, 1, 0} {
+		output := runDocumentationBlock(t, bin, readmeRepo, expectedExit, quickStart[i])
+		if i == 2 && (!strings.Contains(output, "# KAT Summary: demo") || !strings.Contains(output, "token=<redacted>")) {
+			t.Fatalf("README summary inspection did not show the documented redacted evidence: %s", output)
+		}
+	}
+	entries, err := os.ReadDir(filepath.Join(readmeRepo, ".kat", "runs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("README example created %d standalone runs, want 1", len(entries))
+	}
+	readmeRunDir := filepath.Join(readmeRepo, ".kat", "runs", entries[0].Name())
+	for _, name := range []string{"demo.raw.log", "demo.summary.json", "demo.summary.md", "demo.status.json", "excerpts/F001.log"} {
+		if _, err := os.Stat(filepath.Join(readmeRunDir, filepath.FromSlash(name))); err != nil {
+			t.Fatalf("README example artifact %s is missing: %v", name, err)
+		}
+	}
+
+	integrationRepo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(integrationRepo, ".kkachi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	integrationConfig := markdownCodeBlockAfter(t, integrationGuide, "Create `.kkachi/tester.yaml`", "yaml")
+	if err := os.WriteFile(filepath.Join(integrationRepo, ".kkachi", "tester.yaml"), []byte(integrationConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(integrationRepo, "go.mod"), []byte("module example.com/kat-docs\n\ngo 1.26\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(integrationRepo, "documented_test.go"), []byte("package docs\n\nimport \"testing\"\n\nfunc TestDocumentedIntegration(t *testing.T) {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	integrationOutput := runDocumentedCommand(t, bin, integrationRepo, 0, "run", "unit")
+	if !strings.Contains(integrationOutput, "Status: passed") {
+		t.Fatalf("integration guide config did not produce a passing configured run: %s", integrationOutput)
 	}
 }
 

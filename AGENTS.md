@@ -6,7 +6,7 @@ KAT is a standalone deterministic Go CLI for running test commands, preserving r
 
 Current local-dev baseline:
 
-- KAT: `kkachi-agent-tester 0.1.0`
+- KAT: `kkachi-agent-tester 0.1.3`
 - Project root: `/Users/draccoon/Workspace/SeventeenthEarth/kkachi/kkachi-agent-tester`
 - KAT standalone evidence: `.kat/`
 
@@ -15,9 +15,11 @@ Current local-dev baseline:
 Start from repository authority before changing behavior:
 
 - `README.md` for current CLI scope and user-facing examples.
+- `docs/README.md` for document roles and source-of-truth order.
+- `docs/integration-guide.md` for parent-project capability, ownership, and artifact-consumption contracts.
 - `docs/requirements-specs.md` for KAT requirements and non-goals.
 - `docs/architecture.md` and `docs/architecture-decision-records.md` for architectural boundaries.
-- `docs/roadmap.md` for completed/planned task context and GAJAE integration-contract notes.
+- `docs/roadmap.md` for completed and planned task context.
 
 Treat docs carefully:
 
@@ -32,7 +34,7 @@ Before substantial edits:
 
 - State assumptions and success criteria when they affect implementation.
 - Prefer the smallest change that satisfies the requirement.
-- Push back on requests that make KAT a planner, reviewer, acceptance gate, waiver authority, or Kkachi runtime orchestrator.
+- Push back on requests that make KAT a planner, reviewer, acceptance gate, waiver authority, or runtime orchestrator.
 - Ask only for user judgment when scope, authority, credentials, destructive actions, production effects, or materially branching choices remain unclear.
 
 For trivial, reversible, low-risk work, proceed without ceremony and verify the result.
@@ -62,7 +64,7 @@ Preserve these invariants:
 - Standalone runs write under `.kat/runs/<UTC-timestamp>[-NNN]/`.
 - Missing, malformed, unsupported, unsafe, overbroad, or stale evidence should fail closed or be reported as degraded according to the existing contract.
 
-Do not claim same-thread wake, review acceptance, MAR acceptance, waiver, final acceptance, install, release, push, or runtime activation from KAT evidence alone.
+Do not claim review acceptance, waiver, final acceptance, install, release, push, or runtime activation from KAT evidence alone.
 
 ## 6. Local Artifact And Git Safety
 
@@ -111,5 +113,5 @@ Use English for code, docs, tests, commit messages, and run artifacts. Use Korea
 Keep chat reports compact. Put detailed logs, evidence paths, and raw snippets in artifacts or explicit summaries rather than flooding chat. Distinguish:
 
 - development-gate completion,
-- color/MAR/final acceptance,
+- review/final acceptance,
 - commit/push/release/runtime activation boundaries.

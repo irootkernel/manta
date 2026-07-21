@@ -409,23 +409,23 @@ func TestBinaryArtifactContainment(t *testing.T) {
 		}
 	})
 
-	t.Run("valid run id writes Kkachi layout", func(t *testing.T) {
+	t.Run("valid run id writes fixed layout", func(t *testing.T) {
 		repo := t.TempDir()
 		writeE2EConfig(t, repo, "#!/bin/sh\necho ok\n")
 		cmd := exec.Command(bin, "--repo", repo, "--run-id", "run-001", "run", "unit")
 		cmd.Dir = repo
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			t.Fatalf("expected successful Kkachi run, err=%v output=%s", err, out)
+			t.Fatalf("expected successful run-scoped execution, err=%v output=%s", err, out)
 		}
 		base := filepath.Join(repo, ".kkachi", "runs", "run-001", "artifacts", "test")
 		for _, name := range []string{"unit.raw.log", "unit.summary.json", "unit.summary.md", "unit.status.json"} {
 			if _, err := os.Stat(filepath.Join(base, name)); err != nil {
-				t.Fatalf("expected %s in Kkachi layout: %v", name, err)
+				t.Fatalf("expected %s in run-scoped layout: %v", name, err)
 			}
 		}
 		if info, err := os.Stat(filepath.Join(base, "excerpts")); err != nil || !info.IsDir() {
-			t.Fatalf("expected Kkachi excerpts directory, info=%v err=%v", info, err)
+			t.Fatalf("expected run-scoped excerpts directory, info=%v err=%v", info, err)
 		}
 	})
 
@@ -435,7 +435,7 @@ func TestBinaryArtifactContainment(t *testing.T) {
 		runID   string
 	}{
 		{name: "standalone runs", runsDir: filepath.Join(".kat", "runs")},
-		{name: "Kkachi runs", runsDir: filepath.Join(".kkachi", "runs"), runID: "run-001"},
+		{name: "run-id artifacts", runsDir: filepath.Join(".kkachi", "runs"), runID: "run-001"},
 	} {
 		t.Run(test.name+" symlink escape is rejected", func(t *testing.T) {
 			repo := t.TempDir()

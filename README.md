@@ -1,166 +1,176 @@
 # kkachi-agent-tester
 
-KAT is a standalone Go CLI for running test commands, preserving raw logs, extracting bounded failure evidence, and writing compact summary/status artifacts.
+KAT runs a test command, keeps its original output, and produces a compact failure summary that is easier for people and automation to consume.
 
-## Current v0.1 scope
+Use it when you want to:
 
-Implemented:
-- configured runs: `kkachi-agent-tester run <command-id>`
-- ad-hoc runs: `kkachi-agent-tester run --lane <lane> -- <command...>`
-- raw-log summarization: `kkachi-agent-tester summarize <raw-log>`
-- deterministic excerpt lookup: `kkachi-agent-tester excerpt --summary <summary-path> <failure-id>`
-- rule management: `rules list/search/show/create/update/delete/test/propose`
-- supported parsers: `generic`, `vitest`, `pytest`, `go-test`, `playwright`
+- run the same project test commands locally or from automation;
+- keep a raw log for audit while reviewing a much smaller summary;
+- give another tool stable JSON status and evidence paths;
+- summarize a log that was produced outside KAT.
 
-Important behavior:
-- command exit status is authoritative for `run`
-- rules and parsers summarize evidence only; they never change pass/fail
-- specialized parsers fail closed without retrying generic extraction; a miss is `no_match` for a passing command and `degraded` for a non-pass result
-- an extraction internal error preserves an existing failed, timed-out, or killed result; after a passing command, artifacts retain command exit `0` with `status: internal_error` while KAT exits `4`
-- raw evidence is opened before execution and streamed while the command runs
-- on Unix, SIGINT/SIGTERM are forwarded to the command process group and recorded as `killed` with exit code `130`/`143`
-- raw logs are preserved as original evidence and may contain unredacted values
-- configured redaction applies to surfaced command metadata, failure/warning evidence, excerpts, status metadata, and human/JSON command output
-- artifact paths remain literal, usable references; do not place secrets in run IDs, command IDs, output directories, or other artifact-bearing paths
-- a rule's matched block plus before/after context may not exceed 160 lines; overbroad rules fail closed before execution
+KAT never changes a command result: a failing test command remains failed even when no parser recognizes its output.
 
-## Build
+## Install
+
+Install the current release with Go:
 
 ```bash
-go build .
 go install github.com/SeventeenthEarth/kkachi-agent-tester@v0.1.3
-make install
-VERSION=0.1.3 make install-toolchain
 kkachi-agent-tester --version
 ```
 
-`make install` installs the binary with embedded build metadata from a checkout. `make install-toolchain` installs a versioned toolchain copy under `~/.local/kkachi/toolchains/kat/v0.1.3/bin/`.
-
-For deterministic operator and automation use, resolve an explicit binary with the bundled wrapper:
+From a source checkout, use:
 
 ```bash
-KKACHI_KAT_BIN=/absolute/path/to/kkachi-agent-tester scripts/kkachi-agent-tester-toolchain --toolchain-status
+make install
 ```
 
-The resolver does not fall back to `PATH`. It selects `KKACHI_KAT_BIN` first, then `.kkachi/toolchain.yaml` `kat.binary_path`, then the versioned path selected by `kat.cli_version`. Metadata-selected binaries are checked against `kat.cli_version`; missing, relative, non-executable, or version-mismatched selections fail closed. KAS/KAH-generated local metadata may not contain a `kat` entry, in which case set `KKACHI_KAT_BIN` or add explicit local KAT metadata. See [the user interface guide](docs/user-interface.md#version-and-toolchain-selection) for metadata examples.
-
-## Verify
+Projects that pin a local KAT toolchain can install the versioned binary at `~/.local/kkachi/toolchains/kat/v0.1.3/bin/`:
 
 ```bash
-make test
+VERSION=0.1.3 make install-toolchain
 ```
 
-`make test` runs:
-- `format`
-- `lint`
-- `vet`
-- `guardrails`
-- `unit-test`
-- `integration-test`
-- `e2e-test`
+## Try it in five minutes
 
-## Minimal config
+The following disposable command intentionally fails so you can see the evidence KAT creates. Run it from any temporary directory:
 
-```yaml
+```bash
+mkdir -p .kkachi
+cat > .kkachi/tester.yaml <<'YAML'
 version: 1
 commands:
-  unit:
-    command: ["sh", "test.sh"]
+  demo:
+    command: ["sh", "kat-demo-test.sh"]
     lane: unit
     parser: generic
-    timeout_sec: 10
+    timeout_sec: 30
 redaction:
   patterns:
     - name: token
       regex: 'token=[^ ]+'
       replace: 'token=<redacted>'
+YAML
+
+cat > kat-demo-test.sh <<'SH'
+#!/bin/sh
+echo 'TypeError: token=secret failed'
+echo 'src/demo.test.ts:12:3'
+echo '✗ renders the demo'
+exit 1
+SH
+chmod +x kat-demo-test.sh
 ```
 
-Default config path:
+Run the configured command:
 
-```text
-.kkachi/tester.yaml
+```bash
+kkachi-agent-tester run demo
 ```
 
-Run IDs, configured command IDs, and rule IDs must match `[A-Za-z0-9][A-Za-z0-9_-]*`. KAT rejects path syntax in these identifiers before command execution or artifact writes.
+The command exits `1`, and KAT prints the paths of the generated evidence. Open the latest human-readable summary:
 
-Config and rule YAML accept exactly one document and reject unknown fields. Disabled rules require a non-empty `deletion_reason`; active rules must not carry one.
-
-Project-local active rules live under:
-
-```text
-.kkachi/tester/rules/*.yaml
+```bash
+latest_run="$(ls -dt .kat/runs/* | head -1)"
+sed -n '1,120p' "$latest_run/demo.summary.md"
 ```
 
-Run-local proposed rules are kept separate under:
+The summary contains `token=<redacted>`. The corresponding `demo.raw.log` intentionally retains the original `token=secret` value, so treat raw logs as sensitive local evidence.
 
-```text
-.kat/rule-proposals/
+## Configure your project
+
+Commit `.kkachi/tester.yaml` with the commands your project wants to expose. Commands are argv arrays, so no shell quoting is added implicitly.
+
+```yaml
+version: 1
+commands:
+  unit:
+    command: ["go", "test", "./..."]
+    lane: unit
+    parser: go-test
+    timeout_sec: 600
+  web:
+    command: ["pnpm", "vitest", "run"]
+    lane: unit
+    parser: vitest
+    timeout_sec: 600
 ```
 
-## Quick examples
+Choose the parser that matches the command output:
 
-These commands assume the self-contained fixture from [the user interface guide](docs/user-interface.md#tested-setup-fixture). Configured and ad-hoc fixture runs intentionally exit `1` because the fixture represents a failing test.
+| Test output | Parser |
+|---|---|
+| Other or project-specific text | `generic` |
+| Vitest | `vitest` |
+| Pytest | `pytest` |
+| `go test` | `go-test` |
+| Playwright | `playwright` |
 
-Configured run:
+Run a configured command by ID:
 
 ```bash
 kkachi-agent-tester run unit
 ```
 
-Ad-hoc run:
+Use an ad-hoc command when you do not want to add it to the config:
 
 ```bash
-kkachi-agent-tester run --lane unit -- sh test.sh
+kkachi-agent-tester run --lane unit -- go test ./internal/...
 ```
 
-Summarize an existing raw log:
+## Work with existing evidence
+
+Summarize an existing raw log without rerunning its command:
 
 ```bash
-kkachi-agent-tester --run-id summarize-example summarize fixtures/unit.raw.log
+kkachi-agent-tester summarize path/to/unit.raw.log
 ```
 
-Excerpt lookup:
+Use `--run-id` when a parent workflow needs a stable run-scoped location:
 
 ```bash
-kkachi-agent-tester excerpt --summary .kkachi/runs/summarize-example/artifacts/test/unit.summary.json F001
+kkachi-agent-tester --run-id local-check run unit
 ```
 
-Rule lifecycle:
-
-```bash
-kkachi-agent-tester rules create --file fixtures/generic-v1.yaml
-kkachi-agent-tester rules list
-kkachi-agent-tester rules search fixture-backed
-kkachi-agent-tester rules show generic-v1
-kkachi-agent-tester rules test --rule generic-v1 --log fixtures/unit.raw.log --expect-span 2:5
-kkachi-agent-tester rules update generic-v1 --file fixtures/generic-v1-update.yaml
-kkachi-agent-tester rules propose --lane unit --parser generic --raw-log fixtures/unit.raw.log --span 2:4
-kkachi-agent-tester rules delete generic-v1 --reason "superseded by v2"
-```
-
-## Artifact layouts
-
-Standalone mode writes to:
+This writes under:
 
 ```text
-.kat/runs/<UTC-timestamp>[-NNN]/
+.kkachi/runs/local-check/artifacts/test/
 ```
 
-KAT reserves each standalone run directory atomically. The first operation in a UTC-second interval uses the timestamp alone; concurrent or repeated operations use `-001`, `-002`, and later suffixes without overwriting prior evidence. `--output-dir` uses the same allocation rule under `<output-dir>/runs/`.
+For standalone runs, KAT creates a collision-free directory under `.kat/runs/`. Each run contains:
 
-When `--run-id` is supplied, KAT writes to:
+| Artifact | Use |
+|---|---|
+| `*.summary.md` | First stop for human review |
+| `*.status.json` | Compact polling and completion state |
+| `*.summary.json` | Structured failures, warnings, and spans |
+| `excerpts/*.log` | Bounded evidence for one failure |
+| `*.raw.log` | Original, potentially unredacted output |
 
-```text
-.kkachi/runs/<run_id>/artifacts/test/
+Retrieve one failure excerpt without opening the full raw log:
+
+```bash
+kkachi-agent-tester excerpt \
+  --summary .kkachi/runs/local-check/artifacts/test/unit.summary.json \
+  F001
 ```
 
-Summarize mode copies the input raw log into a newly allocated standalone run by default, or into the selected output layout when `--run-id` or `--output-dir` is supplied. The original input remains unchanged.
+Add `--json` when a script needs compact command output. Use `--repo`, `--config`, or `--output-dir` to select a different project root, config, or standalone evidence directory.
 
-Each summarize operation stores a complete raw-log copy in its artifact directory, so repeated summarization increases local storage usage in proportion to the source log size.
+## Safe defaults
 
-Excerpt references stored in summaries are relative to the summary directory, for example `excerpts/F001.log`. `excerpt --summary` accepts absolute summary paths, but rejects absolute, traversal, cross-run, dangling, or symlink-escaping embedded excerpt references.
+- The executed command's exit code is authoritative.
+- Summaries and excerpts are bounded; raw logs are preserved unchanged.
+- Redaction applies to surfaced summaries, excerpts, status, and console metadata, not to raw logs or literal artifact paths.
+- Do not put secrets in run IDs, command IDs, output directories, or filenames.
+- Add `.kat/` and `.kkachi/runs/` to the parent project's ignore rules unless its evidence-retention policy says otherwise.
 
-## Documentation
+## Learn more
 
-Detailed requirements, architecture, UI examples, roadmap, implementation notes, and the requirements-to-test matrix live under `docs/`.
+- [CLI reference and rule workflow](docs/user-interface.md)
+- [Parent-project integration guide and current capability status](docs/integration-guide.md)
+- [Documentation map](docs/README.md)
+- [Architecture and artifact contracts](docs/architecture.md)
+- [Development and verification guidance](AGENTS.md)

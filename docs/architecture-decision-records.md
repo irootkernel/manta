@@ -17,17 +17,17 @@ Date: 2026-06-24
 
 ### Context
 
-KAT is part of a larger Kkachi direction involving KAS, KAH, and GJC, but this repository will be bootstrapped directly by the operator using Gajae-Code. The first milestone should not require KAS or KAH internals.
+KAT must be usable as an independent test-evidence tool in arbitrary repositories. Its first milestone should not require an external orchestration runtime.
 
 ### Decision
 
-KAT v0.1 will be implemented as a standalone deterministic CLI. It may optionally write Kkachi-compatible artifact shapes when a run ID is supplied, but it must not import or require KAS/KAH code.
+KAT v0.1 will be implemented as a standalone deterministic CLI. It may optionally write a fixed run-scoped artifact layout when a run ID is supplied, but it must not require an external orchestration runtime.
 
 ### Consequences
 
-- KAT can be developed and tested before KAS/KAH v0.2 is implemented.
-- KAS/KAH integrations remain optional adapters or artifact consumers.
-- Documentation must avoid assuming KAS/KAH runtime availability.
+- KAT can be developed and tested independently.
+- Integrations remain optional artifact consumers.
+- Documentation must not assume that an orchestration runtime is available.
 
 ## ADR-0002: Command exit status is authoritative
 
@@ -69,7 +69,7 @@ KAT always preserves raw logs and writes compact summary JSON, summary Markdown,
 
 - Operators can review compact summaries first.
 - Raw evidence remains available for audit and rule improvement.
-- Summary artifacts can be consumed by GJC, no-agent watchers, or humans.
+- Summary artifacts can be consumed by automation, no-agent watchers, or humans.
 - Raw-log sharing must be treated as a deliberate operator action.
 - Run IDs, command IDs, output directories, and other artifact-bearing path components must not contain secrets because usable artifact references are not rewritten by redaction.
 
@@ -100,7 +100,7 @@ Date: 2026-06-24
 
 ### Context
 
-Kkachi's delegated execution model should not spend LLM tokens while waiting for tests. Watchers need a deterministic surface.
+Long-running test execution should not require an active agent to wait for completion. Watchers need a deterministic surface.
 
 ### Decision
 

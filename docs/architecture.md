@@ -3,9 +3,11 @@
 Status: Complete
 Scope: Standalone KAT v0.1 architecture
 
+This document defines KAT's technical and artifact contracts. See the [integration guide](integration-guide.md) for parent-project ownership, supported capability status, and rollout guidance.
+
 ## Architecture goals
 
-KAT is a deterministic test and log-evidence tool. It should run test commands, preserve raw output, extract bounded failure evidence, and produce compact artifacts that humans, GJC, KAS, KAH, or simple no-agent watchers can consume. For this repository setup, KAT must remain independent from KAS and KAH.
+KAT is a deterministic test and log-evidence tool. It should run test commands, preserve raw output, extract bounded failure evidence, and produce compact artifacts that humans, automation, or simple no-agent watchers can consume. KAT remains independent from external orchestration runtimes.
 
 ## Implementation baseline
 
@@ -18,9 +20,8 @@ KAT is a deterministic test and log-evidence tool. It should run test commands, 
 ## Non-goals
 
 - KAT is not an autonomous test-writing agent.
-- KAT is not a KAS authority layer.
-- KAT is not a KAH state ledger.
-- For GAJAE-009, KAH normalizes existing KAT v0.1.0 status/summary/raw-log artifacts for attachment, so KAT does not emit a separate bindable evidence snapshot. KAT output remains factual test evidence, not KAS/KAH/GJC authority.
+- KAT is not a workflow authority or state ledger.
+- KAT does not emit consumer-specific evidence snapshots; downstream consumers may normalize the factual status, summary, and raw-log references.
 - KAT does not decide that a failed command passed.
 - KAT does not rely on terminal/tmux log streaming as a control plane.
 
@@ -256,7 +257,7 @@ When extraction fails internally, KAT preserves the raw log and writes empty fai
 - Raw logs are preserved as original source evidence.
 - Raw logs are not redacted by default.
 - Summaries, excerpts, status JSON, and console-safe surfaced text apply configured redaction to command metadata and extracted evidence, including command argv, identifiers, lanes, failure source paths, signatures, test names, stack entries, and warnings.
-- Artifact-reference fields such as `raw_log`, `summary_path`, `raw_log_path`, and excerpt references remain literal locators so watcher, KAH, and operator consumers can resolve them. Operators must not place secrets in artifact-bearing identifiers or paths.
+- Artifact-reference fields such as `raw_log`, `summary_path`, `raw_log_path`, and excerpt references remain literal locators so watchers, automation, and operators can resolve them. Operators must not place secrets in artifact-bearing identifiers or paths.
 - Status signature hashes and `status_hash` are computed from the final redacted metadata and signatures while retaining the existing ordered watcher field set.
 - Documentation and CLI output should warn that raw logs may contain unredacted secrets or sensitive values and should be shared cautiously.
 
@@ -265,5 +266,5 @@ When extraction fails internally, KAT preserves the raw log and writes empty fai
 - Project-local YAML extraction rules.
 - Parser registry entries for specialized runners.
 - Rule proposal from raw-log spans.
-- Optional Kkachi-compatible output layout when a run ID is supplied.
+- Optional fixed run-scoped output layout when a run ID is supplied.
 - Future shared parser promotion after repeated cross-project evidence.

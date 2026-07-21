@@ -1,7 +1,9 @@
 # KAT Roadmap
 
-Status: v0.1 standalone MVP complete; GAJAE integration-contract work complete; HARDE hardening epic complete
+Status: v0.1 standalone MVP complete; HARDE hardening epic complete
 Scope: Implementation tracking for the KAT v0.1 standalone baseline and post-baseline hardening
+
+This roadmap is a delivery record, not an operator guide or a promise that out-of-scope capabilities will be added. See the [integration guide](integration-guide.md) for the current supported/unsupported capability boundary and `todo.md` for explicitly accepted open work.
 
 Task status values: `Planned`, `In Progress`, `Blocked`, `Done`, `Deferred`.
 
@@ -12,7 +14,6 @@ Current implementation snapshot:
 - `In Progress`: none
 - `Deferred`: none
 - `Planned`: none
-- `GAJAE complete`: `GAJAE-009` documented that KAH normalizes existing KAT v0.1.0 artifacts without KAT source changes; `GAJAE-010` finalized durable operator docs/skill guidance after the KAH-side normalization contract
 
 ## SETUP: Project foundation
 
@@ -79,7 +80,7 @@ Current implementation snapshot:
 
 ## HARDE: Post-baseline hardening and contract closure
 
-Implement these tasks as separate, reviewable PRs in numerical order. A task moves to `Done` only after its focused verification and the existing affected test suites pass. `HARDE-007` is the final end-to-end hardening gate.
+These tasks were implemented as separate, reviewable units in numerical order. A task moved to `Done` only after its focused verification and the existing affected test suites passed. `HARDE-007` was the final end-to-end hardening gate.
 
 | Task ID | Status | Goal | Verification | Reference |
 |---|---|---|---|---|
@@ -89,13 +90,4 @@ Implement these tasks as separate, reviewable PRs in numerical order. A task mov
 | HARDE-004 | Done | Complete the redaction boundary for surfaced summary, status, excerpt, and console-safe metadata while leaving original raw logs and literal artifact references unchanged. | Test secrets in argv, identifiers, lanes, evidence-origin paths, failures, and warnings; verify redacted surface fields, unchanged raw evidence, usable artifact references, and final status hashes, then pass safety/CLI/E2E tests. | `KAT-REQ-RQHAR-004`, `KAT-REQ-RQCFG-005`, `KAT-REQ-RQSEC-001`, `KAT-REQ-RQSEC-002`, `ADR-0003` |
 | HARDE-005 | Done | Resolve and implement the specialized-parser miss and internal-error artifact contracts without allowing extraction behavior to override command truth. | Add contract tests for all extractor states and retained run states, then pass extract/CLI/guardrail tests. | `KAT-REQ-RQHAR-005`, `KAT-REQ-RQEXT-005` to `KAT-REQ-RQEXT-007`, `KAT-REQ-RQSEC-005`, `ADR-0002` |
 | HARDE-006 | Done | Synchronize executable CLI behavior and durable documentation, including `--verbose`, `--no-color`, self-contained rule examples, Markdown output, version/toolchain resolver guidance, and roadmap/todo status wording. | Execute every documented command against a fresh fixture, compare generated output with examples, and pass CLI/toolchain E2E tests plus `git diff --check`. | `KAT-REQ-RQHAR-006`, `KAT-REQ-RQCLI-001` to `KAT-REQ-RQCLI-006`, `KAT-REQ-RQDOC-001` to `KAT-REQ-RQDOC-004` |
-| HARDE-007 | Done | Run the complete hardening regression and release-readiness gate across standalone and Kkachi-compatible layouts, then update hardening statuses only from observed evidence. | Pass `make test`, configured/ad-hoc/summarize/excerpt/rules smokes, path and signal probes, both artifact layouts, install/toolchain checks, and `git diff --check`. | `KAT-REQ-RQHAR-007`, `KAT-REQ-RQDOC-004` |
-
-## GAJAE: KAS/KAH pilot-unblock integration contract
-
-KAT remains a standalone deterministic tester. These GAJAE entries document integration-contract work only; they do not move KAS command semantics, KAH run-state ledger behavior, GJC session management, or Kkachi acceptance authority into KAT.
-
-| Task ID | Status | Goal | Reference |
-|---|---|---|---|
-| GAJAE-009 | Done | KAH-side normalization is sufficient for KAH attachment of existing KAT v0.1.0 factual status/summary/raw-log evidence without KAT source changes or a KAT-emitted compatibility snapshot. Preserve command exit code, extractor status, summary/raw refs, and no-authority semantics. | `KAT-REQ-RQART-003`, `KAT-REQ-RQART-005`, `KAT-REQ-RQWAT-001`, `ADR-0001`, `ADR-0002` |
-| GAJAE-010 | Done | Updated durable KAS/KAH/KAT operator docs and skill guidance now that GAJAE-009 settled the final attach contract: raw KAT status remains unchanged, while KAH normalizes status/summary/raw-log refs for attachment. KAT remains factual-only and does not add source/schema behavior, review authority, MAR authority, waiver authority, or final acceptance authority for this closeout. | `KAT-REQ-RQDOC-001`, `KAT-REQ-RQDOC-002`, `KAT-REQ-RQWAT-002` |
+| HARDE-007 | Done | Run the complete hardening regression and release-readiness gate across standalone and fixed run-scoped layouts, then update hardening statuses only from observed evidence. | Pass `make test`, configured/ad-hoc/summarize/excerpt/rules smokes, path and signal probes, both artifact layouts, install/toolchain checks, and `git diff --check`. | `KAT-REQ-RQHAR-007`, `KAT-REQ-RQDOC-004` |

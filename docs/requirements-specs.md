@@ -2,7 +2,7 @@
 
 Status: v0.1 baseline complete; hardening requirements complete (`HARDE-001` through `HARDE-007` complete)
 Scope: KAT v0.1 standalone baseline and post-baseline hardening
-Source context: KAS v0.2 / KAH v0.2 / KAT v0.1 / GJC delegated execution SOT, with KAT kept independent from KAS and KAH for this repository setup.
+Source context: standalone deterministic KAT v0.1 CLI behavior and evidence contracts.
 
 ## Requirement status legend
 
@@ -11,7 +11,7 @@ Source context: KAS v0.2 / KAH v0.2 / KAT v0.1 / GJC delegated execution SOT, wi
 - `[x]` Complete
 - `Blocked` means external decision or missing dependency prevents implementation.
 
-Implementation note: the original v0.1 roadmap is implemented. Repository review identified post-baseline correctness and contract gaps that are now tracked as the `RQHAR` requirements below and the `HARDE` epic in `roadmap.md`. Existing baseline completion records do not imply that the hardening requirements are complete.
+Implementation note: the original v0.1 roadmap and the recorded `RQHAR` hardening requirements are implemented. A checked requirement means that specific behavior is implemented and mapped to evidence; it does not imply support for capabilities outside its wording. See the [integration guide](integration-guide.md) for the current capability matrix and explicit v0.1 boundaries. No open implementation items are currently recorded in `todo.md`.
 
 ## RQCLI: Command-line interface
 
@@ -43,7 +43,7 @@ Implementation note: the original v0.1 roadmap is implemented. Repository review
 ## RQART: Artifact outputs
 
 - [x] `KAT-REQ-RQART-001` Write raw log artifacts to `.kkachi/runs/<run_id>/artifacts/test/<command-id>.raw.log` when a run ID is supplied.
-- [x] `KAT-REQ-RQART-002` Support standalone artifact output under `.kat/` or a caller-specified output directory when no Kkachi run ID is supplied.
+- [x] `KAT-REQ-RQART-002` Support standalone artifact output under `.kat/` or a caller-specified output directory when `--run-id` is not supplied.
 - [x] `KAT-REQ-RQART-003` Write summary JSON with execution status, command metadata, raw-log path, raw-log SHA-256, extractor status, failure count, warning count, failure spans, warning spans, and excerpt references.
 - [x] `KAT-REQ-RQART-004` Write summary Markdown for human review.
 - [x] `KAT-REQ-RQART-005` Write status JSON suitable for no-agent watchers.
@@ -63,7 +63,7 @@ Implementation note: the original v0.1 roadmap is implemented. Repository review
 ## RQRUL: Rule lifecycle and CRUD
 
 - [x] `KAT-REQ-RQRUL-001` Provide `rules list`, `rules search`, `rules show`, `rules create`, `rules update`, `rules delete`, `rules test`, and `rules propose` command surfaces.
-- [x] `KAT-REQ-RQRUL-002` Store project-local rules in `.kkachi/tester.yaml` or `.kkachi/tester/rules/*.yaml`.
+- [x] `KAT-REQ-RQRUL-002` Store project-local rules in `.kkachi/tester/rules/*.yaml`.
 - [x] `KAT-REQ-RQRUL-003` Preserve rule provenance: source run, command, raw-log checksum, source span, reason, creator, and status.
 - [x] `KAT-REQ-RQRUL-004` Support disabled rules and deletion reasons.
 - [x] `KAT-REQ-RQRUL-005` Test rules against raw-log fixtures and expected spans.
@@ -83,7 +83,6 @@ Implementation note: the original v0.1 roadmap is implemented. Repository review
 - [x] `KAT-REQ-RQWAT-001` Produce deterministic status JSON that no-agent watchers can poll without invoking an LLM.
 - [x] `KAT-REQ-RQWAT-002` Define watcher compatibility around exactly these status-hash inputs: command ID, status, exit code, extractor status, raw-log checksum, failure signatures, warning signatures, summary path, and raw-log path.
 - [x] `KAT-REQ-RQWAT-003` Keep watcher-facing output compact and action-oriented.
-- [x] `KAT-REQ-GAJAE-009` For GAJAE-009, confirm KAH-side normalization can consume existing KAT v0.1.0 status/summary/raw-log artifacts without KAT source changes. KAT does not emit an additional bindable GAJAE evidence snapshot, and KAT output remains factual evidence only with no review, MAR, waiver, final, or acceptance claims.
 
 ## RQDOC: Documentation and operator guidance
 
@@ -104,9 +103,9 @@ Implementation note: the original v0.1 roadmap is implemented. Repository review
 
 ## Out of scope for v0.1 standalone setup
 
-- KAS command semantics or skill packaging.
-- KAH run-state ledger implementation; GAJAE-009 is satisfied by KAH-side normalization of existing KAT v0.1.0 factual status/summary/raw-log artifacts without KAT source changes.
-- GJC session management.
+These are intentional current boundaries, not incomplete checked requirements or implicit roadmap commitments. Integration owners should also review [Not provided by KAT v0.1](integration-guide.md#not-provided-by-kat-v01).
+
+- External workflow orchestration, session management, or acceptance-state management.
 - Automatic issue tracker creation.
 - Any rule that changes command pass/fail status.
 - Live runtime state changes, credentials, secrets, or provider configuration.

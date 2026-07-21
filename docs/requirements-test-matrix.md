@@ -25,13 +25,13 @@ This matrix records the primary evidence for every requirement marked complete. 
 | `KAT-REQ-RQRUN-004` | `TestConfiguredRunAndExcerpt`; `TestBinaryConfiguredRunAndExcerpt` |
 | `KAT-REQ-RQRUN-005` | `TestExecuteTimeout`; `TestTimeoutPreservesPartialArtifacts` |
 | `KAT-REQ-RQRUN-006` | `TestExecuteForwardsTerminationAndNormalizesResult`; `TestBinaryPreservesInterruptedEvidence` |
-| `KAT-REQ-RQART-001` | `TestKkachiArtifactLayout`; `TestBinaryArtifactContainment` |
+| `KAT-REQ-RQART-001` | `TestRunIDArtifactLayout`; `TestBinaryArtifactContainment` |
 | `KAT-REQ-RQART-002` | `TestArtifactOutputDirectories`; `TestBinaryStandaloneCollisionResistance` |
 | `KAT-REQ-RQART-003` | `TestConfiguredRunAndExcerpt`; `TestSummarizeInternalErrorMaterializesArtifacts` |
 | `KAT-REQ-RQART-004` | `TestWriteSummaryMarkdownMatchesDocumentedShape`; `TestDocumentedCLIWorkflowAgainstFreshFixture` |
 | `KAT-REQ-RQART-005` | `TestConfiguredRunAndExcerpt`; `TestBinaryJSONRedactsCommandMetadata` |
 | `KAT-REQ-RQART-006` | `TestConfiguredRunAndExcerpt`; `TestExcerptSymlinkContainment` |
-| `KAT-REQ-RQART-007` | `TestArtifactOutputDirectories`; `TestKkachiArtifactLayout` |
+| `KAT-REQ-RQART-007` | `TestArtifactOutputDirectories`; `TestRunIDArtifactLayout` |
 | `KAT-REQ-RQEXT-001` | `TestProcessGenericFailureProducesPreciseSpan` |
 | `KAT-REQ-RQEXT-002` | `TestValidateAcceptsImplementedParsers`; specialized parser fixture tests |
 | `KAT-REQ-RQEXT-003` | `TestProcessGenericFailureProducesPreciseSpan`; `TestProcessRulesBoundsUnvalidatedContext` |
@@ -54,7 +54,6 @@ This matrix records the primary evidence for every requirement marked complete. 
 | `KAT-REQ-RQWAT-001` | `TestConfiguredRunAndExcerpt`; status-hash assertions in CLI and binary tests |
 | `KAT-REQ-RQWAT-002` | `ComputeStatusHash`; status-hash assertions in CLI and binary tests |
 | `KAT-REQ-RQWAT-003` | `TestBinaryJSONRedactsCommandMetadata`; `TestDocumentedCLIWorkflowAgainstFreshFixture` |
-| `KAT-REQ-GAJAE-009` | `architecture.md` GAJAE contract; `TestBinaryConfiguredRunAndExcerpt` artifact compatibility |
 | `KAT-REQ-RQDOC-001` | authoritative documents listed in `AGENTS.md` and `README.md` |
 | `KAT-REQ-RQDOC-002` | `TestDocumentedCLIWorkflowAgainstFreshFixture` |
 | `KAT-REQ-RQDOC-003` | parser fixtures under `internal/extract/testdata`; `TestTestRuleMatchesExpectedSpan` |
