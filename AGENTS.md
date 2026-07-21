@@ -58,6 +58,7 @@ Preserve these invariants:
 
 - Command exit code is authoritative for `run` pass/fail.
 - Parsers, rules, and summaries compress evidence only; they never change pass/fail.
+- Tags are canonical rule selectors: parser labels match exactly and every rule tag must be present on the run.
 - Raw logs are preserved and may contain unredacted values; share raw-log excerpts cautiously.
 - Redaction/noise filtering applies to summaries/excerpts/status output, not to original raw logs.
 - `--run-id` artifacts must stay inside the matching `.manta/runs/scoped/<run_id>/artifacts/test/` path and must not cross-run or symlink-escape.
@@ -68,7 +69,7 @@ Do not claim review acceptance, waiver, final acceptance, install, release, push
 
 ## 6. Local Artifact And Git Safety
 
-These are local runtime/evidence surfaces and should stay out of ordinary source commits unless explicitly scoped:
+These are local runtime/evidence surfaces and must stay out of source commits:
 
 ```text
 .manta/

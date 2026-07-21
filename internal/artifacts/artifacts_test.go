@@ -158,7 +158,7 @@ func TestWriteSummaryJSONFailsWhenTooLarge(t *testing.T) {
 	summary := model.Summary{
 		Status:          model.RunStatusFailed,
 		CommandID:       "unit",
-		Lane:            "unit",
+		Tags:            []string{"unit"},
 		Parser:          "generic",
 		CommandArgv:     []string{"sh", "test.sh"},
 		ExitCode:        1,
@@ -174,6 +174,17 @@ func TestWriteSummaryJSONFailsWhenTooLarge(t *testing.T) {
 	paths := model.ArtifactPaths{BoundaryDir: dir, SummaryJSON: filepath.Join(dir, "summary.json")}
 	if _, err := WriteSummaryJSON(paths, summary); err == nil {
 		t.Fatal("expected oversized summary json to fail")
+	}
+}
+
+func TestComputeStatusHashIncludesTags(t *testing.T) {
+	t.Parallel()
+	status := model.Status{CommandID: "unit", Tags: []string{"go", "unit"}, Status: model.RunStatusFailed, ExitCode: 1}
+	withUnitTags := ComputeStatusHash(status)
+	status.Tags = []string{"go", "integration"}
+	withIntegrationTags := ComputeStatusHash(status)
+	if withUnitTags == withIntegrationTags {
+		t.Fatal("expected tag changes to affect status hash")
 	}
 }
 

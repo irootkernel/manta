@@ -9,7 +9,7 @@ TOOLCHAIN_ROOT ?= $(HOME)/.local/manta/toolchains
 TOOLCHAIN_VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null | sed 's/^v//' || true)
 LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildDate=$(BUILD_DATE)
 
-UNIT_PACKAGES := ./internal/artifacts ./internal/config ./internal/extract ./internal/rules ./internal/runner ./internal/safety
+UNIT_PACKAGES := ./internal/artifacts ./internal/config ./internal/extract ./internal/rules ./internal/runner ./internal/safety ./internal/tagset
 INTEGRATION_PACKAGES := ./internal/cli
 E2E_PACKAGES := ./e2e
 
@@ -65,9 +65,9 @@ vet:
 guardrails:
 	$(GO) test -count=1 ./internal/config -run '^TestValidateRejectsUnknownParser$$'
 	$(GO) test -count=1 ./internal/extract -run '^TestProcessExtractorStatusContract$$'
-	$(GO) test -count=1 ./internal/rules -run '^(TestLoadApplicableFailsOnInvalidDiscoveredFutureParserRule|TestLoadApplicableFailsOnInvalidMatchingRule|TestRuleDetectsOvermatch)$$'
-	$(GO) test -count=1 ./internal/cli -run '^(TestMaterializeArtifactsExtractionErrorRetainsNonPassRunState|TestRawLogPersistsWhenExtractionFails|TestRunInternalErrorAfterPassedCommandMaterializesArtifacts|TestSummarizeInternalErrorMaterializesArtifacts|TestSummarizeRebuildsArtifactsFromRawLogOnly|TestRulesLifecycleCommands)$$'
-	$(GO) test -count=1 ./e2e -run '^TestRequirementTraceabilityMatrixCoversCompletedRequirements$$'
+	$(GO) test -count=1 ./internal/rules -run '^(TestLoadApplicableFailsOnInvalidDiscoveredFutureParserRule|TestLoadApplicableFailsOnInvalidMatchingRule|TestLoadApplicableRequiresAllRuleTags|TestRuleDetectsOvermatch)$$'
+	$(GO) test -count=1 ./internal/cli -run '^(TestMaterializeArtifactsExtractionErrorRetainsNonPassRunState|TestRawLogPersistsWhenExtractionFails|TestRunAndSummarizeSelectRulesByAllTags|TestRunInternalErrorAfterPassedCommandMaterializesArtifacts|TestSummarizeInternalErrorMaterializesArtifacts|TestSummarizeRebuildsArtifactsFromRawLogOnly|TestRulesLifecycleCommands)$$'
+	$(GO) test -count=1 ./e2e -run '^(TestBinaryTagInterfacesFailBeforeExecution|TestBinaryTagsSelectRulesByAllTags|TestRequirementTraceabilityMatrixCoversCompletedRequirements)$$'
 
 unit-test:
 	$(GO) test -count=1 $(UNIT_PACKAGES)

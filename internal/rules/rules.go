@@ -10,6 +10,7 @@ import (
 
 	"github.com/irootkernel/manta/internal/model"
 	"github.com/irootkernel/manta/internal/safety"
+	"github.com/irootkernel/manta/internal/tagset"
 )
 
 var knownRuleParsers = map[string]bool{
@@ -38,14 +39,21 @@ func Discover(repoRoot string) ([]string, error) {
 	return matches, nil
 }
 
-func LoadApplicable(repoRoot, lane, parser string) ([]model.Rule, error) {
+func LoadApplicable(repoRoot string, tags []string, parser string) ([]model.Rule, error) {
+	if err := tagset.Validate(tags); err != nil {
+		return nil, model.NewMantaError(model.ExitCodeConfigError, "select applicable rules", err)
+	}
+	selectedTags := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		selectedTags[tag] = struct{}{}
+	}
 	allRules, err := LoadAll(repoRoot)
 	if err != nil {
 		return nil, err
 	}
 	applicable := make([]model.Rule, 0, len(allRules))
 	for _, rule := range allRules {
-		if !isApplicable(rule, lane, parser) {
+		if !isApplicable(rule, selectedTags, parser) {
 			continue
 		}
 		if rule.Status == model.RuleStatusDisabled {
@@ -56,12 +64,14 @@ func LoadApplicable(repoRoot, lane, parser string) ([]model.Rule, error) {
 	return applicable, nil
 }
 
-func isApplicable(rule model.Rule, lane, parser string) bool {
+func isApplicable(rule model.Rule, selectedTags map[string]struct{}, parser string) bool {
 	if rule.Parser != parser {
 		return false
 	}
-	if rule.Lane != lane {
-		return false
+	for _, tag := range rule.Tags {
+		if _, ok := selectedTags[tag]; !ok {
+			return false
+		}
 	}
 	return true
 }
@@ -79,8 +89,8 @@ func ValidateApplicable(rule model.Rule) error {
 	if !knownRuleParsers[rule.Parser] {
 		return model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q has unsupported parser label %q", rule.ID, rule.Parser))
 	}
-	if strings.TrimSpace(rule.Lane) == "" {
-		return model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q must define lane", rule.ID))
+	if err := tagset.Validate(rule.Tags); err != nil {
+		return model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q tags: %w", rule.ID, err))
 	}
 	if strings.TrimSpace(rule.Match.Start.Regex) == "" {
 		return model.NewMantaError(model.ExitCodeConfigError, "validate rule file", fmt.Errorf("rule %q must define start regex", rule.ID))

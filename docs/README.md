@@ -27,7 +27,7 @@ For Manta maintainers:
 
 ## Current delivery state
 
-The standalone v0.1 baseline and the recorded `HARDE-001` through `HARDE-007` hardening requirements are implemented. The current supported surfaces include configured and ad-hoc command execution, raw-log summarization, excerpt lookup, five parsers, rule lifecycle commands, bounded/redacted derived evidence, collision-free standalone artifacts, fixed run-scoped artifacts, and deterministic status JSON.
+The standalone v0.1 baseline, the recorded `HARDE-001` through `HARDE-007` hardening requirements, and the schema-v2 canonical tag selector contract are implemented. The current supported surfaces include configured and ad-hoc command execution, raw-log summarization, excerpt lookup, five parsers, rule lifecycle commands, bounded/redacted derived evidence, collision-free standalone artifacts, fixed run-scoped artifacts, and deterministic status JSON. All `.manta/` content is local-only state.
 
 There are currently no open implementation items in `todo.md`. That statement is intentionally narrower than “Manta provides every testing or orchestration capability.” Features listed as unsupported or out of scope in the [integration guide](integration-guide.md#not-provided-by-manta-v01) are not implicitly planned or promised.
 

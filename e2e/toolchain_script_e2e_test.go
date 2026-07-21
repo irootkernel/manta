@@ -105,13 +105,13 @@ func TestToolchainScriptForwardsArguments(t *testing.T) {
 	canonicalRepo := canonicalPath(t, repo)
 	bin := writeFakeManta(t, t.TempDir(), "0.1.4")
 
-	out, err := runToolchainScript(python, root, repo, append(os.Environ(), "MANTA_PROJECT_ROOT="+repo, "MANTA_BIN="+bin), "run", "--lane", "unit", "--", "echo", "ok")
+	out, err := runToolchainScript(python, root, repo, append(os.Environ(), "MANTA_PROJECT_ROOT="+repo, "MANTA_BIN="+bin), "run", "--tag", "go", "--tag", "unit", "--", "echo", "ok")
 	if err != nil {
 		t.Fatalf("toolchain forwarding failed: %v\n%s", err, string(out))
 	}
 	output := string(out)
 	for _, want := range []string{
-		"argv=run --lane unit -- echo ok",
+		"argv=run --tag go --tag unit -- echo ok",
 		"project_root=" + canonicalRepo,
 		"effective_manta_bin=" + bin,
 	} {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/irootkernel/manta/internal/model"
 	"github.com/irootkernel/manta/internal/safety"
+	"github.com/irootkernel/manta/internal/tagset"
 )
 
 const DefaultConfigPath = ".manta/tester.yaml"
@@ -32,7 +33,7 @@ func Load(repoRoot, override string, allowMissing bool) (model.Config, string, e
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) && allowMissing && override == "" {
-			cfg := model.Config{Version: 1, Commands: map[string]model.CommandConfig{}}
+			cfg := model.Config{Version: 2, Commands: map[string]model.CommandConfig{}}
 			return cfg, path, nil
 		}
 		return model.Config{}, path, model.NewMantaError(model.ExitCodeConfigError, "read config", err)
@@ -48,11 +49,15 @@ func Load(repoRoot, override string, allowMissing bool) (model.Config, string, e
 	if err := Validate(cfg); err != nil {
 		return model.Config{}, path, err
 	}
+	for id, cmd := range cfg.Commands {
+		cmd.Tags = tagset.Normalize(cmd.Tags)
+		cfg.Commands[id] = cmd
+	}
 	return cfg, path, nil
 }
 
 func Validate(cfg model.Config) error {
-	if cfg.Version != 1 {
+	if cfg.Version != 2 {
 		return model.NewMantaError(model.ExitCodeConfigError, "validate config", fmt.Errorf("unsupported config version %d", cfg.Version))
 	}
 	for id, cmd := range cfg.Commands {
@@ -67,8 +72,8 @@ func Validate(cfg model.Config) error {
 				return model.NewMantaError(model.ExitCodeConfigError, "validate config", fmt.Errorf("command %q contains empty argv item", id))
 			}
 		}
-		if strings.TrimSpace(cmd.Lane) == "" {
-			return model.NewMantaError(model.ExitCodeConfigError, "validate config", fmt.Errorf("command %q must define lane", id))
+		if err := tagset.Validate(cmd.Tags); err != nil {
+			return model.NewMantaError(model.ExitCodeConfigError, "validate config", fmt.Errorf("command %q tags: %w", id, err))
 		}
 		if err := validateParserLabel(cmd.Parser, true); err != nil {
 			return err
@@ -88,11 +93,12 @@ func Validate(cfg model.Config) error {
 	return nil
 }
 
-func ValidateAdHocLane(lane string) error {
-	if strings.TrimSpace(lane) == "" {
-		return model.NewMantaError(model.ExitCodeConfigError, "validate ad hoc lane", fmt.Errorf("--lane is required for ad-hoc runs"))
+func ValidateTags(values []string, operation string) ([]string, error) {
+	canonical, err := tagset.Canonicalize(values)
+	if err != nil {
+		return nil, model.NewMantaError(model.ExitCodeConfigError, operation, err)
 	}
-	return nil
+	return canonical, nil
 }
 
 func validateParserLabel(label string, requireSupported bool) error {

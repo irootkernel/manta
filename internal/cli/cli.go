@@ -131,8 +131,8 @@ func versionCommand(opts globalOptions, args []string, stdout, stderr io.Writer,
 func runCommand(opts globalOptions, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	var lane string
-	fs.StringVar(&lane, "lane", "", "lane")
+	var tags stringList
+	fs.Var(&tags, "tag", "tag (repeatable)")
 	if err := fs.Parse(args); err != nil {
 		writeLine(stderr, err)
 		return int(model.ExitCodeConfigError)
@@ -145,9 +145,9 @@ func runCommand(opts globalOptions, args []string, stdout, stderr io.Writer) int
 		RunID:      opts.RunID,
 		JSON:       opts.JSON,
 	}
-	if lane != "" {
+	if len(tags) > 0 {
 		req.Mode = model.RunModeAdHoc
-		req.Lane = lane
+		req.Tags = tags
 		req.CommandArgv = append([]string(nil), rest...)
 		if len(req.CommandArgv) == 0 {
 			writeLine(stderr, "ad-hoc run requires command after --")
@@ -182,13 +182,15 @@ func runCommand(opts globalOptions, args []string, stdout, stderr io.Writer) int
 func summarizeCommand(opts globalOptions, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("summarize", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
+	var tags stringList
+	fs.Var(&tags, "tag", "tag (repeatable)")
 	if err := fs.Parse(args); err != nil {
 		writeLine(stderr, err)
 		return int(model.ExitCodeConfigError)
 	}
 	rest := fs.Args()
 	if len(rest) != 1 {
-		writeLine(stderr, "usage: manta summarize <raw-log>")
+		writeLine(stderr, "usage: manta summarize [--tag <tag> ...] <raw-log>")
 		return int(model.ExitCodeConfigError)
 	}
 	req := model.RunRequest{
@@ -197,6 +199,7 @@ func summarizeCommand(opts globalOptions, args []string, stdout, stderr io.Write
 		OutputDir:  opts.OutputDir,
 		RunID:      opts.RunID,
 		JSON:       opts.JSON,
+		Tags:       tags,
 	}
 	result, exitCode, err := executeSummarize(req, rest[0])
 	if err != nil {
@@ -222,7 +225,8 @@ func executeRun(req model.RunRequest) (runResult, int, error) {
 		return runResult{}, 0, err
 	}
 
-	var commandID, lane, parser string
+	var commandID, parser string
+	var tags []string
 	var argv []string
 	var timeoutSec int
 	if req.Mode == model.RunModeConfigured {
@@ -231,16 +235,17 @@ func executeRun(req model.RunRequest) (runResult, int, error) {
 			return runResult{}, 0, model.NewMantaError(model.ExitCodeConfigError, "resolve command", fmt.Errorf("unknown command id %q", req.CommandID))
 		}
 		commandID = req.CommandID
-		lane = cmd.Lane
+		tags = cmd.Tags
 		parser = cmd.Parser
 		argv = append([]string(nil), cmd.Command...)
 		timeoutSec = cmd.TimeoutSec
 	} else {
-		if err := config.ValidateAdHocLane(req.Lane); err != nil {
+		canonical, err := config.ValidateTags(req.Tags, "validate ad-hoc tags")
+		if err != nil {
 			return runResult{}, 0, err
 		}
-		commandID = generatedCommandID(req.Lane)
-		lane = req.Lane
+		commandID = generatedCommandID()
+		tags = canonical
 		parser = "generic"
 		argv = append([]string(nil), req.CommandArgv...)
 		timeoutSec = 600
@@ -249,7 +254,7 @@ func executeRun(req model.RunRequest) (runResult, int, error) {
 		return runResult{}, 0, err
 	}
 
-	applicableRules, err := rules.LoadApplicable(req.RepoRoot, lane, parser)
+	applicableRules, err := rules.LoadApplicable(req.RepoRoot, tags, parser)
 	if err != nil {
 		return runResult{}, 0, err
 	}
@@ -261,7 +266,7 @@ func executeRun(req model.RunRequest) (runResult, int, error) {
 	if err != nil {
 		return runResult{}, 0, err
 	}
-	runOutput, runErr := runner.Execute(context.Background(), req.RepoRoot, commandID, lane, parser, argv, timeoutSec, rawFile)
+	runOutput, runErr := runner.Execute(context.Background(), req.RepoRoot, commandID, tags, parser, argv, timeoutSec, rawFile)
 	closeErr := rawFile.Close()
 	if closeErr != nil {
 		return runResult{}, 0, model.NewMantaError(model.ExitCodeArtifactError, "close raw log", closeErr)
@@ -296,12 +301,19 @@ func executeSummarize(req model.RunRequest, rawLogArg string) (runResult, int, e
 		return runResult{}, 0, model.NewMantaError(model.ExitCodeConfigError, "read raw log", err)
 	}
 	commandID := summarizeCommandID(resolved)
-	lane := commandID
+	tags := req.Tags
+	if len(tags) == 0 {
+		tags = []string{commandID}
+	}
+	tags, err = config.ValidateTags(tags, "validate summarize tags")
+	if err != nil {
+		return runResult{}, 0, err
+	}
 	parser := "generic"
 	if err := config.ValidateParserLabel(parser); err != nil {
 		return runResult{}, 0, err
 	}
-	applicableRules, err := rules.LoadApplicable(req.RepoRoot, lane, parser)
+	applicableRules, err := rules.LoadApplicable(req.RepoRoot, tags, parser)
 	if err != nil {
 		return runResult{}, 0, err
 	}
@@ -318,7 +330,7 @@ func executeSummarize(req model.RunRequest, rawLogArg string) (runResult, int, e
 	runOutput := model.RunOutput{
 		Metadata: model.RunMetadata{
 			CommandID:   commandID,
-			Lane:        lane,
+			Tags:        tags,
 			Parser:      parser,
 			CommandArgv: []string{},
 			ExitCode:    exitCode,
@@ -358,7 +370,7 @@ func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.Ar
 	summary := model.Summary{
 		Status:          runOutput.Status,
 		CommandID:       metadata.CommandID,
-		Lane:            metadata.Lane,
+		Tags:            slices.Clone(metadata.Tags),
 		Parser:          metadata.Parser,
 		CommandArgv:     slices.Clone(metadata.CommandArgv),
 		ExitCode:        metadata.ExitCode,
@@ -387,7 +399,7 @@ func materializeArtifacts(req model.RunRequest, cfg model.Config, paths model.Ar
 	statusDoc := model.Status{
 		Status:            runOutput.Status,
 		CommandID:         summary.CommandID,
-		Lane:              summary.Lane,
+		Tags:              slices.Clone(summary.Tags),
 		ExitCode:          metadata.ExitCode,
 		ExtractorStatus:   runOutput.ExtractorStatus,
 		SummaryPath:       artifacts.Rel(req.RepoRoot, paths.SummaryJSON),
@@ -451,7 +463,11 @@ func writeExcerpts(redactor safety.Redactor, noiseFilters []string, paths model.
 
 func redactSummary(summary *model.Summary, redactor safety.Redactor, noiseFilters []string) {
 	summary.CommandID = redactor.Apply(summary.CommandID)
-	summary.Lane = redactor.Apply(summary.Lane)
+	for i := range summary.Tags {
+		summary.Tags[i] = redactor.Apply(summary.Tags[i])
+	}
+	slices.Sort(summary.Tags)
+	summary.Tags = slices.Compact(summary.Tags)
 	summary.Parser = redactor.Apply(summary.Parser)
 	for i := range summary.CommandArgv {
 		summary.CommandArgv[i] = redactor.Apply(summary.CommandArgv[i])
@@ -660,12 +676,19 @@ func resolveRepoRoot(repo string) (string, error) {
 	return filepath.Join(cwd, repo), nil
 }
 
-func generatedCommandID(lane string) string {
-	clean := sanitizeIdentifier(lane)
-	if clean == "" {
-		clean = "command"
-	}
-	return fmt.Sprintf("%s-%s", clean, time.Now().UTC().Format("20060102t150405"))
+func generatedCommandID() string {
+	return fmt.Sprintf("adhoc-%s", time.Now().UTC().Format("20060102t150405"))
+}
+
+type stringList []string
+
+func (values *stringList) String() string {
+	return strings.Join(*values, ",")
+}
+
+func (values *stringList) Set(value string) error {
+	*values = append(*values, value)
+	return nil
 }
 
 func summarizeCommandID(path string) string {

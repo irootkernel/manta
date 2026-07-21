@@ -24,7 +24,7 @@ func TestLoadApplicableFailsOnInvalidDiscoveredFutureParserRule(t *testing.T) {
 	}
 	futureRule := []byte(strings.Join([]string{
 		"id: future-v1",
-		"lane: unit",
+		"tags: [unit]",
 		"parser: vitest",
 		"status: active",
 		"provenance:",
@@ -50,7 +50,7 @@ func TestLoadApplicableFailsOnInvalidDiscoveredFutureParserRule(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(rulesDir, "future.yaml"), futureRule, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := LoadApplicable(repo, "unit", "generic"); err == nil {
+	if _, err := LoadApplicable(repo, []string{"unit"}, "generic"); err == nil {
 		t.Fatal("expected any discovered invalid rule file to fail closed")
 	}
 }
@@ -156,7 +156,7 @@ func TestLoadApplicableSkipsValidNonMatchingFutureParserRule(t *testing.T) {
 	}
 	futureRule := []byte(strings.Join([]string{
 		"id: future-v1",
-		"lane: unit",
+		"tags: [unit]",
 		"parser: vitest",
 		"status: active",
 		"provenance:",
@@ -187,12 +187,40 @@ func TestLoadApplicableSkipsValidNonMatchingFutureParserRule(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(rulesDir, "future.yaml"), futureRule, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	loaded, err := LoadApplicable(repo, "unit", "generic")
+	loaded, err := LoadApplicable(repo, []string{"unit"}, "generic")
 	if err != nil {
 		t.Fatalf("expected valid non-matching rule to validate and skip, got %v", err)
 	}
 	if len(loaded) != 0 {
 		t.Fatalf("expected no applicable rules, got %d", len(loaded))
+	}
+}
+
+func TestLoadApplicableRequiresAllRuleTags(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	commonRule := validRule("go-common")
+	commonRule.Tags = []string{"go"}
+	unitRule := validRule("go-unit")
+	unitRule.Tags = []string{"unit", "go", "unit"}
+	integrationRule := validRule("go-integration")
+	integrationRule.Tags = []string{"go", "integration"}
+
+	for _, rule := range []model.Rule{commonRule, unitRule, integrationRule} {
+		if _, err := Create(repo, rule); err != nil {
+			t.Fatalf("Create(%s) failed: %v", rule.ID, err)
+		}
+	}
+
+	loaded, err := LoadApplicable(repo, []string{"unit", "go"}, "generic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 2 || loaded[0].ID != "go-common" || loaded[1].ID != "go-unit" {
+		t.Fatalf("applicable rules = %+v, want go-common and go-unit", loaded)
+	}
+	if got := strings.Join(loaded[1].Tags, ","); got != "go,unit" {
+		t.Fatalf("canonical rule tags = %q, want go,unit", got)
 	}
 }
 
@@ -205,7 +233,7 @@ func TestLoadApplicableFailsOnInvalidMatchingRule(t *testing.T) {
 	}
 	invalidRule := []byte(strings.Join([]string{
 		"id: generic-v1",
-		"lane: unit",
+		"tags: [unit]",
 		"parser: generic",
 		"status: active",
 		"provenance:",
@@ -234,7 +262,7 @@ func TestLoadApplicableFailsOnInvalidMatchingRule(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(rulesDir, "generic.yaml"), invalidRule, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := LoadApplicable(repo, "unit", "generic"); err == nil {
+	if _, err := LoadApplicable(repo, []string{"unit"}, "generic"); err == nil {
 		t.Fatal("expected invalid matching rule to fail closed")
 	}
 }
@@ -436,7 +464,7 @@ func TestProposeRejectsSymlinkEscape(t *testing.T) {
 	if err := os.WriteFile(rawPath, []byte(rawText), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Propose(repo, "unit", "generic", rawPath, 2, 4)
+	_, err := Propose(repo, []string{"unit"}, "generic", rawPath, 2, 4)
 	if model.ExitCodeFor(err) != int(model.ExitCodeArtifactError) {
 		t.Fatalf("expected artifact error, got %v", err)
 	}
@@ -517,7 +545,7 @@ func TestProposeWritesRunLocalProposal(t *testing.T) {
 	if err := os.WriteFile(rawPath, []byte(rawText), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	proposal, err := Propose(repo, "unit", "generic", rawPath, 2, 4)
+	proposal, err := Propose(repo, []string{"unit"}, "generic", rawPath, 2, 4)
 	if err != nil {
 		t.Fatalf("Propose failed: %v", err)
 	}
@@ -547,7 +575,7 @@ func TestProposeReservesContextFromSpanBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	proposal, err := Propose(repo, "unit", "generic", rawPath, 1, safety.MaxBlockLines)
+	proposal, err := Propose(repo, []string{"unit"}, "generic", rawPath, 1, safety.MaxBlockLines)
 	if err != nil {
 		t.Fatalf("Propose failed: %v", err)
 	}
@@ -567,7 +595,7 @@ func TestProposePreservesMeaningfulLineWhitespace(t *testing.T) {
 	if err := os.WriteFile(rawPath, []byte(rawText), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	proposal, err := Propose(repo, "unit", "generic", rawPath, 2, 4)
+	proposal, err := Propose(repo, []string{"unit"}, "generic", rawPath, 2, 4)
 	if err != nil {
 		t.Fatalf("Propose failed: %v", err)
 	}
@@ -599,7 +627,7 @@ func TestProposeAllocatesUniqueFilesConcurrently(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			proposal, err := proposeAt(repo, "unit", "generic", rawPath, 1, 1, fixed)
+			proposal, err := proposeAt(repo, []string{"unit"}, "generic", rawPath, 1, 1, fixed)
 			if err != nil {
 				errs <- err
 				return
@@ -645,7 +673,7 @@ func TestRuleDetectsOvermatch(t *testing.T) {
 func validRule(id string) model.Rule {
 	return model.Rule{
 		ID:     id,
-		Lane:   "unit",
+		Tags:   []string{"unit"},
 		Parser: "generic",
 		Status: model.RuleStatusActive,
 		Provenance: model.RuleProvenance{

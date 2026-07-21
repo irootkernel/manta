@@ -16,11 +16,11 @@ func TestValidateAcceptsImplementedParsers(t *testing.T) {
 		t.Run(parser, func(t *testing.T) {
 			t.Parallel()
 			cfg := model.Config{
-				Version: 1,
+				Version: 2,
 				Commands: map[string]model.CommandConfig{
 					"unit": {
 						Command:    []string{"sh", "test.sh"},
-						Lane:       "unit",
+						Tags:       []string{"unit"},
 						Parser:     parser,
 						TimeoutSec: 60,
 					},
@@ -42,14 +42,14 @@ func TestLoadRejectsUnknownFieldsAndMultipleDocuments(t *testing.T) {
 		{
 			name: "unknown field",
 			data: strings.Join([]string{
-				"version: 1",
+				"version: 2",
 				"redactions:",
 				"  patterns: []",
 			}, "\n") + "\n",
 		},
 		{
 			name: "multiple documents",
-			data: "version: 1\n---\nversion: 1\n",
+			data: "version: 2\n---\nversion: 2\n",
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -69,11 +69,11 @@ func TestLoadRejectsUnknownFieldsAndMultipleDocuments(t *testing.T) {
 func TestValidateRejectsUnknownParser(t *testing.T) {
 	t.Parallel()
 	cfg := model.Config{
-		Version: 1,
+		Version: 2,
 		Commands: map[string]model.CommandConfig{
 			"unit": {
 				Command:    []string{"sh", "test.sh"},
-				Lane:       "unit",
+				Tags:       []string{"unit"},
 				Parser:     "made-up",
 				TimeoutSec: 60,
 			},
@@ -90,11 +90,11 @@ func TestValidateRejectsUnsafeCommandIDs(t *testing.T) {
 		t.Run(id, func(t *testing.T) {
 			t.Parallel()
 			cfg := model.Config{
-				Version: 1,
+				Version: 2,
 				Commands: map[string]model.CommandConfig{
 					id: {
 						Command:    []string{"true"},
-						Lane:       "unit",
+						Tags:       []string{"unit"},
 						Parser:     "generic",
 						TimeoutSec: 60,
 					},
@@ -104,5 +104,52 @@ func TestValidateRejectsUnsafeCommandIDs(t *testing.T) {
 				t.Fatalf("expected unsafe command id %q to fail", id)
 			}
 		})
+	}
+}
+
+func TestLoadCanonicalizesTags(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	path := filepath.Join(repo, "tester.yaml")
+	data := strings.Join([]string{
+		"version: 2",
+		"commands:",
+		"  unit:",
+		"    command: [go, test, ./...]",
+		"    tags: [unit, go, unit]",
+		"    parser: go-test",
+		"    timeout_sec: 60",
+	}, "\n") + "\n"
+	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _, err := Load(repo, path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(cfg.Commands["unit"].Tags, ","); got != "go,unit" {
+		t.Fatalf("canonical tags = %q, want go,unit", got)
+	}
+}
+
+func TestValidateRejectsMissingAndUnsafeTags(t *testing.T) {
+	t.Parallel()
+	for _, tags := range [][]string{nil, {}, {"unit/test"}, {" unit"}} {
+		cfg := model.Config{
+			Version: 2,
+			Commands: map[string]model.CommandConfig{
+				"unit": {Command: []string{"true"}, Tags: tags, Parser: "generic", TimeoutSec: 60},
+			},
+		}
+		if err := Validate(cfg); err == nil {
+			t.Fatalf("expected tags %q to fail validation", tags)
+		}
+	}
+}
+
+func TestValidateRejectsVersionOne(t *testing.T) {
+	t.Parallel()
+	if err := Validate(model.Config{Version: 1}); err == nil {
+		t.Fatal("expected config version 1 to be rejected")
 	}
 }

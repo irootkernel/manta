@@ -41,7 +41,7 @@ func TestMaterializeArtifactsExtractionErrorRetainsNonPassRunState(t *testing.T)
 			runOutput := model.RunOutput{
 				Metadata: model.RunMetadata{
 					CommandID: tt.name,
-					Lane:      "unit",
+					Tags:      []string{"unit"},
 					Parser:    "generic",
 					ExitCode:  tt.exitCode,
 				},
@@ -82,11 +82,11 @@ func TestRunInternalErrorAfterPassedCommandMaterializesArtifacts(t *testing.T) {
 		t.Fatal(err)
 	}
 	configText := strings.Join([]string{
-		"version: 1",
+		"version: 2",
 		"commands:",
 		"  huge-pass:",
 		"    command: [\"sh\", \"huge-pass.sh\"]",
-		"    lane: unit",
+		"    tags: [unit]",
 		"    parser: generic",
 		"    timeout_sec: 10",
 	}, "\n") + "\n"

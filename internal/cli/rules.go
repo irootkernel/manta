@@ -63,7 +63,7 @@ func rulesListCommand(opts globalOptions, args []string, stdout, stderr io.Write
 		return 0
 	}
 	for _, rule := range loaded {
-		writef(stdout, "%s\t%s\t%s\t%s\t%s\n", rule.ID, rule.Status, rule.Parser, rule.Lane, filepath.ToSlash(rule.SourcePath))
+		writeRuleLine(stdout, rule)
 	}
 	return 0
 }
@@ -84,7 +84,7 @@ func rulesSearchCommand(opts globalOptions, args []string, stdout, stderr io.Wri
 		return 0
 	}
 	for _, rule := range loaded {
-		writef(stdout, "%s\t%s\t%s\t%s\t%s\n", rule.ID, rule.Status, rule.Parser, rule.Lane, filepath.ToSlash(rule.SourcePath))
+		writeRuleLine(stdout, rule)
 	}
 	return 0
 }
@@ -233,8 +233,9 @@ func rulesTestCommand(opts globalOptions, args []string, stdout, stderr io.Write
 func rulesProposeCommand(opts globalOptions, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("rules propose", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	var lane, parser, rawLogPath, span string
-	fs.StringVar(&lane, "lane", "", "lane")
+	var tags stringList
+	var parser, rawLogPath, span string
+	fs.Var(&tags, "tag", "tag (repeatable)")
 	fs.StringVar(&parser, "parser", "", "parser")
 	fs.StringVar(&rawLogPath, "raw-log", "", "raw log path")
 	fs.StringVar(&span, "span", "", "source span start:end")
@@ -243,11 +244,11 @@ func rulesProposeCommand(opts globalOptions, args []string, stdout, stderr io.Wr
 		return int(model.ExitCodeConfigError)
 	}
 	start, end, err := parseSpan(span)
-	if err != nil || lane == "" || parser == "" || rawLogPath == "" {
-		writeLine(stderr, "usage: manta rules propose --lane <lane> --parser <parser> --raw-log <raw-log> --span <start:end>")
+	if err != nil || len(tags) == 0 || parser == "" || rawLogPath == "" {
+		writeLine(stderr, "usage: manta rules propose --tag <tag> [--tag <tag> ...] --parser <parser> --raw-log <raw-log> --span <start:end>")
 		return int(model.ExitCodeConfigError)
 	}
-	proposal, err := rules.Propose(opts.RepoRoot, lane, parser, rawLogPath, start, end)
+	proposal, err := rules.Propose(opts.RepoRoot, tags, parser, rawLogPath, start, end)
 	if err != nil {
 		writeLine(stderr, err)
 		return model.ExitCodeFor(err)
@@ -280,8 +281,12 @@ func writeRuleResponse(stdout io.Writer, rule model.Rule, jsonMode bool) int {
 		writeLine(stdout, string(data))
 		return 0
 	}
-	writef(stdout, "%s\t%s\t%s\t%s\t%s\n", rule.ID, rule.Status, rule.Parser, rule.Lane, filepath.ToSlash(rule.SourcePath))
+	writeRuleLine(stdout, rule)
 	return 0
+}
+
+func writeRuleLine(stdout io.Writer, rule model.Rule) {
+	writef(stdout, "%s\t%s\t%s\t%s\t%s\n", rule.ID, rule.Status, rule.Parser, strings.Join(rule.Tags, ","), filepath.ToSlash(rule.SourcePath))
 }
 
 func parseSpan(value string) (int, int, error) {

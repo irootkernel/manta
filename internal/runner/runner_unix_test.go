@@ -37,7 +37,7 @@ func TestExecuteForwardsTerminationAndNormalizesResult(t *testing.T) {
 	}
 	finished := make(chan result, 1)
 	go func() {
-		output, runErr := executeWithSignals(context.Background(), repo, "wait", "unit", "generic", []string{"sh", "wait.sh"}, 10, raw, interrupts, 500*time.Millisecond)
+		output, runErr := executeWithSignals(context.Background(), repo, "wait", []string{"unit"}, "generic", []string{"sh", "wait.sh"}, 10, raw, interrupts, 500*time.Millisecond)
 		finished <- result{output: output, err: runErr}
 	}()
 	waitForFile(t, filepath.Join(repo, "ready"))
@@ -93,7 +93,7 @@ func TestExecuteCleansDescendantsAfterLeaderExits(t *testing.T) {
 	finished := make(chan result, 1)
 	gracePeriod := 5 * time.Second
 	go func() {
-		output, runErr := executeWithSignals(context.Background(), repo, "descendant", "unit", "generic", []string{"sh", "descendant.sh"}, 10, raw, interrupts, gracePeriod)
+		output, runErr := executeWithSignals(context.Background(), repo, "descendant", []string{"unit"}, "generic", []string{"sh", "descendant.sh"}, 10, raw, interrupts, gracePeriod)
 		finished <- result{output: output, err: runErr}
 	}()
 	waitForFile(t, filepath.Join(repo, "ready"))
@@ -141,7 +141,7 @@ func TestExecuteRecoversLeaderResultAfterWaitDelay(t *testing.T) {
 			}
 			var raw bytes.Buffer
 			started := time.Now()
-			output, err := executeWithSignals(context.Background(), repo, "wait-delay", "unit", "generic", []string{"sh", "wait-delay.sh"}, 10, &raw, make(chan os.Signal, 2), 50*time.Millisecond)
+			output, err := executeWithSignals(context.Background(), repo, "wait-delay", []string{"unit"}, "generic", []string{"sh", "wait-delay.sh"}, 10, &raw, make(chan os.Signal, 2), 50*time.Millisecond)
 			if err != nil {
 				t.Fatalf("executeWithSignals failed: %v", err)
 			}
@@ -175,7 +175,7 @@ func TestExecuteCleansDescendantsAfterSuccessfulLeaderExit(t *testing.T) {
 		t.Fatal(err)
 	}
 	var raw bytes.Buffer
-	output, err := executeWithSignals(context.Background(), repo, "background", "unit", "generic", []string{"sh", "background.sh"}, 10, &raw, make(chan os.Signal, 2), 50*time.Millisecond)
+	output, err := executeWithSignals(context.Background(), repo, "background", []string{"unit"}, "generic", []string{"sh", "background.sh"}, 10, &raw, make(chan os.Signal, 2), 50*time.Millisecond)
 	if err != nil {
 		t.Fatalf("executeWithSignals failed: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestExecuteEscalatesSecondTermination(t *testing.T) {
 	interrupts := make(chan os.Signal, 2)
 	finished := make(chan model.RunOutput, 1)
 	go func() {
-		output, _ := executeWithSignals(context.Background(), repo, "ignore", "unit", "generic", []string{"sh", "ignore.sh"}, 10, raw, interrupts, 2*time.Second)
+		output, _ := executeWithSignals(context.Background(), repo, "ignore", []string{"unit"}, "generic", []string{"sh", "ignore.sh"}, 10, raw, interrupts, 2*time.Second)
 		finished <- output
 	}()
 	waitForFile(t, filepath.Join(repo, "ready"))
@@ -248,7 +248,7 @@ func TestExecuteEscalatesAfterGracePeriod(t *testing.T) {
 	finished := make(chan result, 1)
 	gracePeriod := 100 * time.Millisecond
 	go func() {
-		output, runErr := executeWithSignals(context.Background(), repo, "ignore", "unit", "generic", []string{"sh", "ignore.sh"}, 10, raw, interrupts, gracePeriod)
+		output, runErr := executeWithSignals(context.Background(), repo, "ignore", []string{"unit"}, "generic", []string{"sh", "ignore.sh"}, 10, raw, interrupts, gracePeriod)
 		finished <- result{output: output, err: runErr}
 	}()
 	waitForFile(t, filepath.Join(repo, "ready"))

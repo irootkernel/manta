@@ -18,6 +18,7 @@ import (
 	"github.com/irootkernel/manta/internal/extract"
 	"github.com/irootkernel/manta/internal/model"
 	"github.com/irootkernel/manta/internal/safety"
+	"github.com/irootkernel/manta/internal/tagset"
 )
 
 func RulesDir(repoRoot string) string {
@@ -47,6 +48,7 @@ func LoadAll(repoRoot string) ([]model.Rule, error) {
 		if err := ValidateStoredRule(rule); err != nil {
 			return nil, err
 		}
+		rule.Tags = tagset.Normalize(rule.Tags)
 		rules = append(rules, rule)
 	}
 	sort.Slice(rules, func(i, j int) bool { return rules[i].ID < rules[j].ID })
@@ -82,7 +84,7 @@ func Search(repoRoot, query string) ([]model.Rule, error) {
 	for _, rule := range rules {
 		haystack := strings.ToLower(strings.Join([]string{
 			rule.ID,
-			rule.Lane,
+			strings.Join(rule.Tags, " "),
 			rule.Parser,
 			string(rule.Status),
 			rule.Provenance.CreatedBy,
@@ -172,13 +174,14 @@ func TestRule(repoRoot, id, rawLogPath string, expectStart, expectEnd int) (mode
 	return result, nil
 }
 
-func Propose(repoRoot, lane, parser, rawLogPath string, startLine, endLine int) (model.RuleProposal, error) {
-	return proposeAt(repoRoot, lane, parser, rawLogPath, startLine, endLine, time.Now().UTC())
+func Propose(repoRoot string, tags []string, parser, rawLogPath string, startLine, endLine int) (model.RuleProposal, error) {
+	return proposeAt(repoRoot, tags, parser, rawLogPath, startLine, endLine, time.Now().UTC())
 }
 
-func proposeAt(repoRoot, lane, parser, rawLogPath string, startLine, endLine int, now time.Time) (model.RuleProposal, error) {
-	if strings.TrimSpace(lane) == "" {
-		return model.RuleProposal{}, model.NewMantaError(model.ExitCodeConfigError, "propose rule", fmt.Errorf("--lane is required"))
+func proposeAt(repoRoot string, tags []string, parser, rawLogPath string, startLine, endLine int, now time.Time) (model.RuleProposal, error) {
+	canonical, err := tagset.Canonicalize(tags)
+	if err != nil {
+		return model.RuleProposal{}, model.NewMantaError(model.ExitCodeConfigError, "propose rule", err)
 	}
 	if strings.TrimSpace(parser) == "" {
 		return model.RuleProposal{}, model.NewMantaError(model.ExitCodeConfigError, "propose rule", fmt.Errorf("--parser is required"))
@@ -216,7 +219,7 @@ func proposeAt(repoRoot, lane, parser, rawLogPath string, startLine, endLine int
 	maxMatchedLines := safety.MaxBlockLines - contextBefore - contextAfter
 	rule := model.Rule{
 		ID:     proposalID,
-		Lane:   lane,
+		Tags:   canonical,
 		Parser: parser,
 		Status: model.RuleStatusActive,
 		Provenance: model.RuleProvenance{
@@ -321,6 +324,7 @@ func writeRuleFile(repoRoot, path string, rule model.Rule) (model.Rule, error) {
 	if err := ValidateStoredRule(rule); err != nil {
 		return model.Rule{}, err
 	}
+	rule.Tags = tagset.Normalize(rule.Tags)
 	if err := safety.MkdirAllWithin(repoRoot, filepath.Dir(path), 0o755); err != nil {
 		return model.Rule{}, model.NewMantaError(model.ExitCodeArtifactError, "create rule directory", err)
 	}

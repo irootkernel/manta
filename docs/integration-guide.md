@@ -27,7 +27,7 @@ The command exit code is authoritative. Parsers and rules describe evidence qual
 | Area | Supported in v0.1.4 | Integration note |
 |---|---|---|
 | Configured execution | Yes | `run <command-id>` reads `.manta/tester.yaml`. |
-| Ad-hoc execution | Yes | `run --lane <lane> -- <argv...>` can run without configured commands. |
+| Ad-hoc execution | Yes | `run --tag <tag> [--tag <tag> ...] -- <argv...>` can run without configured commands. |
 | Existing-log processing | Yes | `summarize <raw-log>` copies and summarizes a log without rerunning the command. Its inferred result is not authoritative execution metadata. |
 | Failure excerpt lookup | Yes | `excerpt --summary <path> <failure-id>` validates contained references before reading. |
 | Parsers | Yes | `generic`, `vitest`, `pytest`, `go-test`, and `playwright`. |
@@ -59,23 +59,15 @@ These are current boundaries, not hidden partial features:
 
 No open implementation items are currently recorded in `todo.md`. The boundaries above are not future commitments; a new requirement and roadmap item should be approved before broadening them.
 
-## Files owned by the parent project
+## Local-only Manta state
 
-Commit these when used:
-
-```text
-.manta/tester.yaml
-.manta/tester/rules/*.yaml
-```
-
-Keep runtime evidence out of ordinary source commits unless the parent project has an explicit evidence-retention requirement:
+Ignore the entire `.manta/` directory. Manta config, reviewed local rules, toolchain metadata, proposals, and evidence are machine-local development state rather than portable source inputs:
 
 ```gitignore
-.manta/runs/
-.manta/rule-proposals/
+.manta/
 ```
 
-Treat `.manta/toolchain.yaml` as local/generated state unless the parent project explicitly owns a portable toolchain policy. Never commit an absolute `manta.binary_path` that is meaningful only on one machine.
+Projects that need shared automation must generate or provision their local Manta state through their own bootstrap process. Manta does not distribute `.manta/` content. Never commit an absolute `manta.binary_path` that is meaningful only on one machine.
 
 ## 1. Select and verify the binary
 
@@ -114,16 +106,16 @@ The resolver requires Python 3, absolute executable overrides, and an exact sema
 Create `.manta/tester.yaml`:
 
 ```yaml
-version: 1
+version: 2
 commands:
   unit:
     command: ["go", "test", "./..."]
-    lane: unit
+    tags: [go, unit]
     parser: go-test
     timeout_sec: 600
   e2e:
     command: ["pnpm", "playwright", "test"]
-    lane: e2e
+    tags: [e2e, web]
     parser: playwright
     timeout_sec: 1800
 noise_filters:
@@ -140,8 +132,9 @@ Integration rules:
 - Use argv arrays, not a shell command string. Add `sh -c` explicitly only when shell behavior is required.
 - Choose the specialized parser only when the command emits that runner's output. Use `generic` for other output.
 - Set `timeout_sec` from `1` to `86400`; invalid config fails before execution.
-- Command IDs, run IDs, and rule IDs must match `[A-Za-z0-9][A-Za-z0-9_-]*`.
+- Command IDs, run IDs, rule IDs, and tags must match `[A-Za-z0-9][A-Za-z0-9_-]*`.
 - Config and rule files accept one YAML document, reject unknown fields, and use Go RE2 regex syntax.
+- Tags are sorted and deduplicated. A rule applies when its parser matches and all of its tags are present on the run; multiple active rules may apply to one raw log.
 
 ## 3. Choose an invocation layout
 
@@ -216,14 +209,15 @@ See the [architecture extraction policy](architecture.md#failure-and-degraded-ex
 A watcher that suppresses duplicate notifications must hash exactly this ordered input set:
 
 1. `command_id`
-2. `status`
-3. `exit_code`
-4. `extractor_status`
-5. `raw_log_sha256`
-6. `failure_signatures`
-7. `warning_signatures`
-8. `summary_path`
-9. `raw_log_path`
+2. comma-joined canonical `tags`
+3. `status`
+4. `exit_code`
+5. `extractor_status`
+6. `raw_log_sha256`
+7. `failure_signatures`
+8. `warning_signatures`
+9. `summary_path`
+10. `raw_log_path`
 
 Manta also writes `status_hash` from these final, redacted surfaced values. A parent watcher owns polling frequency, notification policy, retries, retention, and any transition into an external state store.
 
@@ -241,8 +235,8 @@ Manta remains standalone and imposes no evidence-consumer runtime dependency.
 ## Rollout checklist
 
 - [ ] Pin and verify one Manta version.
-- [ ] Commit `.manta/tester.yaml` and any reviewed active rules.
-- [ ] Ignore `.manta/runs/` and `.manta/rule-proposals/` or define an explicit retention policy.
+- [ ] Ignore the entire `.manta/` directory.
+- [ ] Provision local `.manta/tester.yaml` and any reviewed active rules on each development machine that needs them.
 - [ ] Exercise one passing and one failing command through Manta.
 - [ ] Exercise timeout handling for at least one long-running command.
 - [ ] Confirm the selected parser recognizes the parent project's real logs; treat `degraded` as a rule/parser improvement signal.
@@ -256,5 +250,20 @@ Manta remains standalone and imposes no evidence-consumer runtime dependency.
 ## Compatibility and upgrades
 
 Pin Manta by semantic version and run the parent project's passing/failing integration fixtures before upgrading. Changes to config, status/summary fields, exit semantics, parser behavior, redaction boundaries, or artifact layouts require synchronized updates to requirements, architecture, user documentation, and executable contract tests in this repository.
+
+### Schema v2 tag migration
+
+Schema v2 is a breaking replacement for the single-lane contract:
+
+| Schema v1 surface | Schema v2 replacement |
+|---|---|
+| `version: 1` | `version: 2` |
+| command or rule `lane: unit` | `tags: [unit]`, optionally with additional selector dimensions |
+| `run --lane unit -- <command...>` | `run --tag unit [--tag <tag> ...] -- <command...>` |
+| `rules propose --lane unit ...` | `rules propose --tag unit [--tag <tag> ...] ...` |
+| summary/status `"lane": "unit"` | canonical JSON array `"tags": ["unit"]` |
+| lane-derived ad-hoc command IDs | `adhoc-<UTC timestamp>` command IDs independent of tags |
+
+There is no v1 decoder or `--lane` compatibility alias. Old config, rule fields, and CLI flags fail closed with config exit code `2` before command execution. Consumers that hash status fields must insert comma-joined canonical tags immediately after `command_id` in the ordered watcher input.
 
 For exact CLI syntax and a complete tested rule fixture, see the [CLI reference](user-interface.md). For JSON shapes and path-safety semantics, see the [architecture](architecture.md).

@@ -1,7 +1,7 @@
 # Manta Architecture
 
-Status: Complete
-Scope: Standalone Manta v0.1 architecture
+Status: Complete through `HARDE-007` and `TAGS-001`
+Scope: Standalone Manta v0.1 architecture, including schema-v2 tag selectors
 
 This document defines Manta's technical and artifact contracts. See the [integration guide](integration-guide.md) for parent-project ownership, supported capability status, and rollout guidance.
 
@@ -58,7 +58,7 @@ CLI
 1. User runs `manta run unit`.
 2. CLI resolves repository root and config path.
 3. Config loader validates `.manta/tester.yaml`.
-4. Command registry resolves `unit` to command argv / lane / parser / timeout.
+4. Command registry resolves `unit` to command argv / canonical tags / parser / timeout.
 5. Artifact writer opens the contained raw log before command execution.
 6. Runner executes the command in the selected working directory and streams stdout/stderr into the raw log.
 7. CLI closes and validates the contained raw log, then the extraction engine processes the captured raw bytes with the selected parser plus project rules.
@@ -75,7 +75,7 @@ On Unix, the runner starts the command in its own process group. SIGINT and SIGT
 1. User runs `manta summarize fixtures/unit.raw.log`.
 2. CLI resolves repository root, config path, and raw-log path.
 3. Config loader validates optional redaction/noise config and project rules.
-4. Manta infers `command_id` and `lane` from the raw-log basename when no execution metadata exists.
+4. Manta infers `command_id` from the raw-log basename and uses it as a single tag when the caller does not supply `--tag` values.
 5. Artifact writer reserves a standalone run directory, or uses the fixed `--run-id` layout, and copies the original raw bytes into it.
 6. Extraction engine applies the `generic` parser plus matching project rules to the copied evidence.
 7. Redactor and noise filters shape surfaced artifacts.
@@ -131,14 +131,14 @@ Default config path:
 Minimal shape:
 
 ```yaml
-version: 1
+version: 2
 commands:
   unit:
     command:
       - pnpm
       - vitest
       - run
-    lane: unit
+    tags: [unit, web]
     parser: generic
     timeout_sec: 600
 noise_filters:
@@ -150,6 +150,8 @@ redaction:
       replace: "$1=<redacted>"
 ```
 
+Tags are canonicalized by sorting and removing duplicates. They select project rules rather than commands: the parser must match exactly and every rule tag must be contained in the run tags. Multiple active rules can therefore apply to one raw log. Tags never alter the authoritative command exit code.
+
 ## Summary JSON contract
 
 The summary JSON should be stable enough for downstream tools while remaining implementation-friendly:
@@ -157,7 +159,9 @@ The summary JSON should be stable enough for downstream tools while remaining im
 ```yaml
 status: failed | passed | timed_out | killed | internal_error
 command_id: unit
-lane: unit
+tags:
+  - go
+  - unit
 parser: generic
 command_argv:
   - pnpm
@@ -201,7 +205,9 @@ Status JSON is for no-agent polling and should be compact:
 ```yaml
 status: failed | passed | timed_out | killed | internal_error
 command_id: unit
-lane: unit
+tags:
+  - go
+  - unit
 exit_code: 1
 extractor_status: precise | partial | degraded | no_match
 summary_path: .manta/runs/standalone/20260624T010203/unit.summary.json
@@ -220,14 +226,15 @@ updated_at: 2026-06-24T01:02:03Z
 No-agent watchers should suppress duplicate notifications by hashing exactly this ordered field set:
 
 1. `command_id`
-2. `status`
-3. `exit_code`
-4. `extractor_status`
-5. `raw_log_sha256`
-6. `failure_signatures`
-7. `warning_signatures`
-8. `summary_path`
-9. `raw_log_path`
+2. comma-joined canonical `tags`
+3. `status`
+4. `exit_code`
+5. `extractor_status`
+6. `raw_log_sha256`
+7. `failure_signatures`
+8. `warning_signatures`
+9. `summary_path`
+10. `raw_log_path`
 
 Other fields may be present for convenience, but watcher compatibility is defined by the field set above.
 
@@ -256,9 +263,9 @@ When extraction fails internally, Manta preserves the raw log and writes empty f
 
 - Raw logs are preserved as original source evidence.
 - Raw logs are not redacted by default.
-- Summaries, excerpts, status JSON, and console-safe surfaced text apply configured redaction to command metadata and extracted evidence, including command argv, identifiers, lanes, failure source paths, signatures, test names, stack entries, and warnings.
+- Summaries, excerpts, status JSON, and console-safe surfaced text apply configured redaction to command metadata and extracted evidence, including command argv, identifiers, tags, failure source paths, signatures, test names, stack entries, and warnings.
 - Artifact-reference fields such as `raw_log`, `summary_path`, `raw_log_path`, and excerpt references remain literal locators so watchers, automation, and operators can resolve them. Operators must not place secrets in artifact-bearing identifiers or paths.
-- Status signature hashes and `status_hash` are computed from the final redacted metadata and signatures while retaining the existing ordered watcher field set.
+- Status signature hashes and `status_hash` are computed from the final redacted metadata and signatures. Canonical comma-joined tags follow `command_id` in the ordered watcher field set.
 - Documentation and CLI output should warn that raw logs may contain unredacted secrets or sensitive values and should be shared cautiously.
 
 ## Extension points

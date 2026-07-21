@@ -209,6 +209,7 @@ func SHA256(data []byte) string {
 func ComputeStatusHash(status model.Status) string {
 	ordered := []string{
 		status.CommandID,
+		strings.Join(status.Tags, ","),
 		string(status.Status),
 		fmt.Sprintf("%d", status.ExitCode),
 		string(status.ExtractorStatus),

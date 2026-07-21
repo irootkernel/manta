@@ -1,7 +1,7 @@
 # Manta User Interface
 
-Status: Complete through `HARDE-007`
-Scope: CLI-first interface for Manta v0.1
+Status: Complete through `HARDE-007` and `TAGS-001`
+Scope: CLI-first interface for Manta v0.1, including schema-v2 tag selectors
 
 This is the complete command reference. First-time users should begin with the repository [README](../README.md); parent-project owners should use the [integration guide](integration-guide.md) for ownership boundaries and adoption steps.
 
@@ -13,15 +13,15 @@ This is the complete command reference. First-time users should begin with the r
 - No hidden pass/fail overrides.
 - Compact console output; details live in artifacts.
 - Raw logs are preserved as source evidence and may contain unredacted values.
-- Redaction covers surfaced command metadata and extracted failure/warning content, including argv, identifiers, lanes, source paths, test names, and stack entries.
+- Redaction covers surfaced command metadata and extracted failure/warning content, including argv, identifiers, tags, source paths, test names, and stack entries.
 - Artifact-reference fields remain literal and usable. Do not put secrets in run IDs, command IDs, output directories, or other path components.
 
 ## Primary commands
 
 ```bash
 manta run <command-id>
-manta run --lane <lane> -- <command...>
-manta summarize <raw-log>
+manta run --tag <tag> [--tag <tag> ...] -- <command...>
+manta summarize [--tag <tag> ...] <raw-log>
 manta excerpt --summary <summary-path> <failure-id>
 ```
 
@@ -35,7 +35,7 @@ manta rules create --file <rule.yaml>
 manta rules update <rule-id> --file <rule.yaml>
 manta rules delete <rule-id> --reason <reason>
 manta rules test --rule <rule-id> --log <raw-log> --expect-span <start:end>
-manta rules propose --lane <lane> --parser <parser> --raw-log <raw-log> --span <start:end>
+manta rules propose --tag <tag> [--tag <tag> ...] --parser <parser> --raw-log <raw-log> --span <start:end>
 ```
 
 ## Supported parser labels
@@ -48,7 +48,7 @@ Implemented parser labels:
 - `go-test`
 - `playwright`
 
-Applicable project rules run before the selected parser. The `generic` label uses generic extraction patterns; specialized labels use only their own parser patterns and never retry generic extraction. A specialized-parser miss reports `no_match` after a pass and `degraded` after a non-pass result.
+Applicable project rules are evaluated first. The selected parser is a fallback and runs only when no rule produces a failure. The `generic` label uses generic extraction patterns; specialized labels use only their own parser patterns and never retry generic extraction. A specialized-parser miss reports `no_match` after a pass and `degraded` after a non-pass result.
 
 Parser-specific examples in this repository are backed by fixture logs under `internal/extract/testdata/`.
 
@@ -65,9 +65,11 @@ Recommended global options:
 | `--run-id <id>` | Use the fixed `.manta/runs/scoped/<run_id>/...` run-scoped artifact layout. |
 | `--json` | Print compact JSON result to stdout. |
 
-Run IDs, configured command IDs, and rule IDs must match `[A-Za-z0-9][A-Za-z0-9_-]*`. Invalid identifiers fail with config exit code `2`; run identifiers are checked before the test command starts.
+Run IDs, configured command IDs, rule IDs, and tags must match `[A-Za-z0-9][A-Za-z0-9_-]*`. Invalid identifiers fail with config exit code `2`; run identifiers and tags are checked before the test command starts. Tags are sorted and deduplicated before matching or serialization.
 
 Manta output is plain text and does not emit ANSI color. Historical `--no-color` and `--verbose` placeholders had no executable behavior and are not supported options; either flag now fails closed with config exit code `2`.
+
+Schema v1, `lane` fields, and `--lane` are not compatibility aliases. They fail closed with config exit code `2`; see the [schema-v2 migration guide](integration-guide.md#schema-v2-tag-migration) for the required replacements and artifact changes.
 
 ## Version and toolchain selection
 
@@ -109,7 +111,7 @@ manta:
   binary_path: "/absolute/path/to/manta"
 ```
 
-If `.manta/toolchain.yaml` omits the `manta` block, set `MANTA_BIN` or add explicit local Manta metadata. Treat machine-specific generated metadata as local state, not source documentation.
+If `.manta/toolchain.yaml` omits the `manta` block, set `MANTA_BIN` or add explicit local Manta metadata. The entire `.manta/` directory, including config, rules, toolchain metadata, proposals, and evidence, is local-only state and should be ignored by Git.
 
 ## Tested setup fixture
 
@@ -118,11 +120,11 @@ The examples below are grounded in the current automated tests. They use this mi
 ```bash
 mkdir -p .manta/tester fixtures
 cat > .manta/tester.yaml <<'YAML'
-version: 1
+version: 2
 commands:
   unit:
     command: ["sh", "test.sh"]
-    lane: unit
+    tags: [generic, unit]
     parser: generic
     timeout_sec: 10
 redaction:
@@ -153,7 +155,7 @@ LOG
 
 cat > fixtures/generic-v1.yaml <<'YAML'
 id: generic-v1
-lane: unit
+tags: [generic, unit]
 parser: generic
 status: active
 provenance:
@@ -206,7 +208,7 @@ manta --config .manta/tester.yaml --run-id example-run run unit
 Ad-hoc run without project config commands:
 
 ```bash
-manta run --lane unit -- sh test.sh
+manta run --tag generic --tag unit -- sh test.sh
 # exits 1 because the fixture command fails
 ```
 
@@ -242,22 +244,24 @@ manta rules search fixture-backed
 manta rules show generic-v1
 manta rules test --rule generic-v1 --log fixtures/unit.raw.log --expect-span 2:5
 manta rules update generic-v1 --file fixtures/generic-v1-update.yaml
-manta rules propose --lane unit --parser generic --raw-log fixtures/unit.raw.log --span 2:4
+manta rules propose --tag generic --tag unit --parser generic --raw-log fixtures/unit.raw.log --span 2:4
 manta rules delete generic-v1 --reason "superseded by v2"
 ```
 
 For project rules, `max_block_lines` counts the matched block including its start line. The matched block plus `include_context.before` and `include_context.after` must not exceed 160 lines; overbroad or overflow-sized values fail closed with config exit code `2`.
 
+Tags are rule selectors, not command selectors or automatic rule generators. The parser must match exactly, and every tag declared by a rule must be present on the run. For a run tagged `[go, unit]`, rules tagged `[go]`, `[unit]`, and `[go, unit]` are applicable, while `[integration]` is not. All applicable active rules inspect the raw log first; the selected parser runs only when those rules produce no failure. `rules propose` writes only a local candidate under `.manta/rule-proposals/`; an operator must review, test, and explicitly create it before it becomes active under `.manta/tester/rules/`.
+
 ## Summarize mode notes
 
 - `summarize <raw-log>` uses the `generic` parser plus any matching project rules.
-- When only a raw log is available, Manta infers `command_id` and `lane` from the raw-log basename. For example, `unit.raw.log` produces `command_id: unit` and `lane: unit`.
+- When tags are omitted, Manta infers `command_id` from the raw-log basename and uses that command ID as a single tag. For example, `unit.raw.log` produces `command_id: unit` and `tags: [unit]`. Repeat `--tag` to provide an explicit selector set instead.
 - Because original execution metadata is unavailable, summarize infers `status` and `exit_code` from raw-log evidence. Use `run` when authoritative execution metadata is required.
 - If extraction fails internally, summarize still preserves the copied raw log and writes degraded `internal_error` summary/status artifacts with exit code `4`; the diagnostic is emitted on stderr.
 - Without `--run-id` or `--output-dir`, summarize copies the input raw log into a newly allocated `.manta/runs/standalone/<UTC-timestamp>[-NNN]/` directory and writes derived artifacts there. `--output-dir` uses the same collision-free allocation under `<output-dir>/runs/`; `--run-id` retains the fixed run-scoped layout. The original input remains unchanged.
 - Each summarize operation stores a complete raw-log copy in its artifact directory, so repeated summarization increases local storage usage in proportion to the source log size.
 - Summary JSON stores excerpt references relative to the summary directory, such as `excerpts/F001.log`. An absolute `--summary` input remains valid, while absolute, traversal, cross-run, dangling, and symlink-escaping embedded references fail with artifact exit code `3`.
-- Inferred `command_id` and `lane` values are redacted in summary, status, and console metadata. The copied raw-log and derived artifact references retain their literal filenames so they remain resolvable.
+- Inferred `command_id` and tag values are redacted in summary, status, and console metadata. The copied raw-log and derived artifact references retain their literal filenames so they remain resolvable.
 
 ## Exit code guidance
 

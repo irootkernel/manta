@@ -110,7 +110,7 @@ func TestProcessRuleAssistedExtraction(t *testing.T) {
 	raw := []byte("setup\nTypeError: boom\nsrc/foo.ts:99:7\n✗ renders empty state\n\nsummary\n")
 	rule := model.Rule{
 		ID:     "generic-v1",
-		Lane:   "unit",
+		Tags:   []string{"unit"},
 		Parser: "generic",
 		Status: model.RuleStatusActive,
 		Match: model.RuleMatch{

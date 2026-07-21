@@ -91,7 +91,7 @@ func TestBinaryRuleTestDoesNotUseParserFallback(t *testing.T) {
 	}
 	rule := strings.Join([]string{
 		"id: never-match",
-		"lane: unit",
+		"tags: [unit]",
 		"parser: generic",
 		"status: active",
 		"provenance:",
@@ -212,7 +212,7 @@ func TestBinaryPreservesConcurrentRuleProposals(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			cmd := exec.Command(bin, "--repo", repo, "rules", "propose", "--lane", "unit", "--parser", "generic", "--raw-log", rawPath, "--span", "1:1")
+			cmd := exec.Command(bin, "--repo", repo, "rules", "propose", "--tag", "unit", "--parser", "generic", "--raw-log", rawPath, "--span", "1:1")
 			if out, err := cmd.CombinedOutput(); err != nil {
 				errs <- fmt.Errorf("%w: %s", err, out)
 			}
@@ -234,7 +234,7 @@ func TestBinaryPreservesConcurrentRuleProposals(t *testing.T) {
 
 func auditRuleYAML(id string, maxBlockLines, before, after int) string {
 	return fmt.Sprintf(`id: %s
-lane: unit
+tags: [unit]
 parser: generic
 status: active
 provenance:

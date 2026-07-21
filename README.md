@@ -39,11 +39,11 @@ The following disposable command intentionally fails so you can see the evidence
 ```bash
 mkdir -p .manta
 cat > .manta/tester.yaml <<'YAML'
-version: 1
+version: 2
 commands:
   demo:
     command: ["sh", "manta-demo-test.sh"]
-    lane: unit
+    tags: [demo, unit]
     parser: generic
     timeout_sec: 30
 redaction:
@@ -78,21 +78,21 @@ sed -n '1,120p' "$latest_run/demo.summary.md"
 
 The summary contains `token=<redacted>`. The corresponding `demo.raw.log` intentionally retains the original `token=secret` value, so treat raw logs as sensitive local evidence.
 
-## Configure your project
+## Configure your local project
 
-Commit `.manta/tester.yaml` with the commands your project wants to expose. Commands are argv arrays, so no shell quoting is added implicitly.
+Create `.manta/tester.yaml` with the commands you want to expose locally. The entire `.manta/` directory is local state and should be ignored by Git. Commands are argv arrays, so no shell quoting is added implicitly.
 
 ```yaml
-version: 1
+version: 2
 commands:
   unit:
     command: ["go", "test", "./..."]
-    lane: unit
+    tags: [go, unit]
     parser: go-test
     timeout_sec: 600
   web:
     command: ["pnpm", "vitest", "run"]
-    lane: unit
+    tags: [unit, web]
     parser: vitest
     timeout_sec: 600
 ```
@@ -116,8 +116,10 @@ manta run unit
 Use an ad-hoc command when you do not want to add it to the config:
 
 ```bash
-manta run --lane unit -- go test ./internal/...
+manta run --tag go --tag unit -- go test ./internal/...
 ```
+
+Tags select which local extraction rules may inspect a raw log; they do not select the command or change pass/fail. A rule applies only when its parser matches and all of its tags are present on the run. This lets a `tags: [go]` rule apply to both Go unit and integration runs while a `tags: [go, unit]` rule remains unit-specific. Multiple applicable rules may run against the same log.
 
 ## Work with existing evidence
 
@@ -125,6 +127,12 @@ Summarize an existing raw log without rerunning its command:
 
 ```bash
 manta summarize path/to/unit.raw.log
+```
+
+Add repeatable tags when the filename alone does not describe the applicable rule scope:
+
+```bash
+manta summarize --tag go --tag unit path/to/unit.raw.log
 ```
 
 Use `--run-id` when a parent workflow needs a stable run-scoped location:
@@ -165,7 +173,7 @@ Add `--json` when a script needs compact command output. Use `--repo`, `--config
 - Summaries and excerpts are bounded; raw logs are preserved unchanged.
 - Redaction applies to surfaced summaries, excerpts, status, and console metadata, not to raw logs or literal artifact paths.
 - Do not put secrets in run IDs, command IDs, output directories, or filenames.
-- Add `.manta/runs/` and `.manta/rule-proposals/` to the parent project's ignore rules unless its evidence-retention policy says otherwise.
+- Ignore the entire `.manta/` directory. Config, rules, toolchain metadata, proposals, and evidence are local-only state.
 
 ## Learn more
 

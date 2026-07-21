@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -14,7 +15,7 @@ func TestRulesLifecycleCommands(t *testing.T) {
 	inputPath := filepath.Join(repo, "generic-v1.yaml")
 	ruleText := strings.Join([]string{
 		"id: generic-v1",
-		"lane: unit",
+		"tags: [unit]",
 		"parser: generic",
 		"status: active",
 		"provenance:",
@@ -100,13 +101,20 @@ func TestRulesLifecycleCommands(t *testing.T) {
 	}
 	stdout.Reset()
 	stderr.Reset()
-	exitCode = Main([]string{"--repo", repo, "rules", "propose", "--lane", "unit", "--parser", "generic", "--raw-log", filepath.ToSlash(rawPath), "--span", "2:4"}, &stdout, &stderr)
+	exitCode = Main([]string{"--repo", repo, "rules", "propose", "--tag", "unit", "--tag", "go", "--parser", "generic", "--raw-log", filepath.ToSlash(rawPath), "--span", "2:4"}, &stdout, &stderr)
 	if exitCode != 0 || !strings.Contains(stdout.String(), "Proposed rule:") {
 		t.Fatalf("expected rules propose to succeed, exit=%d stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
 	}
 	proposalEntries, err := os.ReadDir(filepath.Join(repo, ".manta", "rule-proposals"))
 	if err != nil || len(proposalEntries) != 1 {
 		t.Fatalf("expected one proposal file, err=%v entries=%d", err, len(proposalEntries))
+	}
+	proposal, err := readRuleInput(filepath.Join(repo, ".manta", "rule-proposals", proposalEntries[0].Name()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(proposal.Tags, []string{"go", "unit"}) {
+		t.Fatalf("proposal tags = %q, want [go unit]", proposal.Tags)
 	}
 	stdout.Reset()
 	stderr.Reset()

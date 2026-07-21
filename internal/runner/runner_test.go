@@ -16,7 +16,7 @@ func TestExecuteTimeout(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
 	var raw bytes.Buffer
-	output, err := Execute(context.Background(), repo, "sleep", "unit", "generic", []string{"sh", "-c", "echo started; sleep 2"}, 1, &raw)
+	output, err := Execute(context.Background(), repo, "sleep", []string{"unit"}, "generic", []string{"sh", "-c", "echo started; sleep 2"}, 1, &raw)
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestExecuteCanceledContext(t *testing.T) {
 	var raw bytes.Buffer
 	finished := make(chan result, 1)
 	go func() {
-		output, err := Execute(ctx, repo, "cancel", "unit", "generic", []string{"sh", "-c", "echo started; touch ready; while :; do sleep 1; done"}, 30, &raw)
+		output, err := Execute(ctx, repo, "cancel", []string{"unit"}, "generic", []string{"sh", "-c", "echo started; touch ready; while :; do sleep 1; done"}, 30, &raw)
 		finished <- result{output: output, err: err}
 	}()
 

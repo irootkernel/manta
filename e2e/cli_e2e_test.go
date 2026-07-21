@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -40,11 +41,11 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 		t.Fatal(err)
 	}
 	configText := strings.Join([]string{
-		"version: 1",
+		"version: 2",
 		"commands:",
 		"  command_secret_id:",
 		"    command: [\"sh\", \"test.sh\", \"secret_arg\"]",
-		"    lane: lane-secret_lane",
+		"    tags: [unit, tag-secret_tag]",
 		"    parser: generic",
 		"    timeout_sec: 10",
 		"redaction:",
@@ -105,8 +106,8 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 	if summary.Status != model.RunStatusFailed {
 		t.Fatalf("expected failed status, got %s", summary.Status)
 	}
-	if summary.CommandID != "command_<redacted>" || summary.Lane != "lane-<redacted>" {
-		t.Fatalf("expected redacted binary summary metadata, got command=%q lane=%q", summary.CommandID, summary.Lane)
+	if summary.CommandID != "command_<redacted>" || !slices.Equal(summary.Tags, []string{"tag-<redacted>", "unit"}) {
+		t.Fatalf("expected redacted binary summary metadata, got command=%q tags=%q", summary.CommandID, summary.Tags)
 	}
 	if len(summary.CommandArgv) != 3 || summary.CommandArgv[2] != "<redacted>" {
 		t.Fatalf("expected redacted binary argv, got %+v", summary.CommandArgv)
@@ -132,7 +133,7 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 	if err := json.Unmarshal(statusData, &status); err != nil {
 		t.Fatal(err)
 	}
-	if status.CommandID != summary.CommandID || status.Lane != summary.Lane || status.StatusHash != artifacts.ComputeStatusHash(status) {
+	if status.CommandID != summary.CommandID || !slices.Equal(status.Tags, summary.Tags) || status.StatusHash != artifacts.ComputeStatusHash(status) {
 		t.Fatalf("expected redacted, self-consistent binary status, got %+v", status)
 	}
 	rawData, err := os.ReadFile(filepath.Join(runDir, "command_secret_id.raw.log"))
@@ -208,8 +209,8 @@ func TestBinaryConfiguredRunAndExcerpt(t *testing.T) {
 	if summary.Status != model.RunStatusFailed || len(summary.Failures) == 0 {
 		t.Fatalf("expected summarize to create failed summary with failures, got %+v", summary)
 	}
-	if summary.CommandID != "command_<redacted>" || summary.Lane != "command_<redacted>" {
-		t.Fatalf("expected redacted binary summarize metadata, got command=%q lane=%q", summary.CommandID, summary.Lane)
+	if summary.CommandID != "command_<redacted>" || !slices.Equal(summary.Tags, []string{"command_<redacted>"}) {
+		t.Fatalf("expected redacted binary summarize metadata, got command=%q tags=%q", summary.CommandID, summary.Tags)
 	}
 	excerptOut, err = exec.Command(bin, "--repo", repo, "excerpt", "--summary", filepath.ToSlash(summaryPath), "F001").CombinedOutput()
 	if err != nil {
@@ -232,11 +233,11 @@ func TestBinaryJSONRedactsCommandMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	configText := strings.Join([]string{
-		"version: 1",
+		"version: 2",
 		"commands:",
 		"  json_secret_id:",
 		"    command: [\"sh\", \"test.sh\", \"secret_arg\"]",
-		"    lane: lane-secret_lane",
+		"    tags: [unit, tag-secret_tag]",
 		"    parser: generic",
 		"    timeout_sec: 10",
 		"redaction:",
@@ -356,8 +357,8 @@ func TestBinaryStandaloneCollisionResistance(t *testing.T) {
 		results = append(results, decodeBinaryRunResult(t, commandOutput.output))
 	}
 	results = append(results,
-		runBinaryJSON(t, bin, repo, "run", "--lane", "unit", "sh", "adhoc.sh"),
-		runBinaryJSON(t, bin, repo, "run", "--lane", "unit", "sh", "adhoc.sh"),
+		runBinaryJSON(t, bin, repo, "run", "--tag", "unit", "sh", "adhoc.sh"),
+		runBinaryJSON(t, bin, repo, "run", "--tag", "unit", "sh", "adhoc.sh"),
 	)
 	assertDistinctBinaryRunDirectories(t, repo, results)
 	for _, result := range results {
@@ -509,6 +510,194 @@ func TestBinaryArtifactContainment(t *testing.T) {
 	}
 }
 
+func TestBinaryTagsSelectRulesByAllTags(t *testing.T) {
+	t.Parallel()
+	root := projectRoot(t)
+	bin := buildBinary(t, root)
+	repo := t.TempDir()
+	rawText := writeE2ETagSelectorFixture(t, repo)
+
+	configured, stderr := runBinaryJSONWithExit(t, bin, repo, 1, "run", "unit")
+	if stderr != "" {
+		t.Fatalf("configured run diagnostic: %s", stderr)
+	}
+	configuredSummary, _, _ := loadBinaryRunArtifacts(t, repo, configured)
+	assertBinarySelectedRules(t, configuredSummary, []string{"go", "unit"}, []string{"COMMON_ONLY", "UNIT_ONLY"})
+
+	adhoc, stderr := runBinaryJSONWithExit(t, bin, repo, 1, "run", "--tag", "unit", "--tag", "go", "--tag", "unit", "--", "sh", "selector.sh")
+	if stderr != "" {
+		t.Fatalf("ad-hoc run diagnostic: %s", stderr)
+	}
+	if !strings.HasPrefix(adhoc.Command, "adhoc-") {
+		t.Fatalf("ad-hoc command id = %q", adhoc.Command)
+	}
+	adhocSummary, _, _ := loadBinaryRunArtifacts(t, repo, adhoc)
+	assertBinarySelectedRules(t, adhocSummary, []string{"go", "unit"}, []string{"COMMON_ONLY", "UNIT_ONLY"})
+
+	rawPath := filepath.Join(repo, "selector.raw.log")
+	if err := os.WriteFile(rawPath, []byte(rawText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	summarized := runBinaryJSON(t, bin, repo, "summarize", "--tag", "integration", "--tag", "go", "--tag", "integration", rawPath)
+	summarizedSummary, _, _ := loadBinaryRunArtifacts(t, repo, summarized)
+	assertBinarySelectedRules(t, summarizedSummary, []string{"go", "integration"}, []string{"COMMON_ONLY", "INTEGRATION_ONLY"})
+	if summarizedSummary.Status != model.RunStatusPassed {
+		t.Fatalf("rules changed inferred summarize status: %s", summarizedSummary.Status)
+	}
+}
+
+func TestBinaryTagInterfacesFailBeforeExecution(t *testing.T) {
+	t.Parallel()
+	root := projectRoot(t)
+	bin := buildBinary(t, root)
+
+	for _, test := range []struct {
+		name       string
+		configText string
+		args       []string
+		wantError  string
+	}{
+		{name: "unsafe tag", args: []string{"run", "--tag", "../unit", "--", "sh", "marker.sh"}, wantError: "tag"},
+		{name: "removed flag", args: []string{"run", "--lane", "unit", "--", "sh", "marker.sh"}, wantError: "flag provided but not defined"},
+		{
+			name: "config version one",
+			configText: strings.Join([]string{
+				"version: 1",
+				"commands:",
+				"  unit:",
+				"    command: [sh, marker.sh]",
+				"    tags: [unit]",
+				"    parser: generic",
+				"    timeout_sec: 10",
+			}, "\n") + "\n",
+			args:      []string{"run", "unit"},
+			wantError: "unsupported config version 1",
+		},
+		{
+			name: "removed config field",
+			configText: strings.Join([]string{
+				"version: 2",
+				"commands:",
+				"  unit:",
+				"    command: [sh, marker.sh]",
+				"    lane: unit",
+				"    parser: generic",
+				"    timeout_sec: 10",
+			}, "\n") + "\n",
+			args:      []string{"run", "unit"},
+			wantError: "field lane not found",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repo := t.TempDir()
+			if err := os.WriteFile(filepath.Join(repo, "marker.sh"), []byte("#!/bin/sh\ntouch command-ran\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if test.configText != "" {
+				if err := os.MkdirAll(filepath.Join(repo, ".manta"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(test.configText), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			args := append([]string{"--repo", repo}, test.args...)
+			cmd := exec.Command(bin, args...)
+			cmd.Dir = repo
+			out, err := cmd.CombinedOutput()
+			requireExitCode(t, err, int(model.ExitCodeConfigError), out)
+			if !strings.Contains(string(out), test.wantError) {
+				t.Fatalf("output %q does not contain %q", out, test.wantError)
+			}
+			if _, err := os.Stat(filepath.Join(repo, "command-ran")); !os.IsNotExist(err) {
+				t.Fatalf("command executed before validation, stat error=%v", err)
+			}
+		})
+	}
+}
+
+func writeE2ETagSelectorFixture(t *testing.T, repo string) string {
+	t.Helper()
+	rulesDir := filepath.Join(repo, ".manta", "tester", "rules")
+	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configText := strings.Join([]string{
+		"version: 2",
+		"commands:",
+		"  unit:",
+		"    command: [sh, selector.sh]",
+		"    tags: [unit, go, unit]",
+		"    parser: generic",
+		"    timeout_sec: 10",
+	}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(configText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rawText := "COMMON_ONLY\n\nUNIT_ONLY\n\nINTEGRATION_ONLY\n\n"
+	script := "#!/bin/sh\nprintf '%s' '" + rawText + "'\nexit 1\n"
+	if err := os.WriteFile(filepath.Join(repo, "selector.sh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, rule := range []struct {
+		id     string
+		tags   string
+		marker string
+	}{
+		{id: "common", tags: "[go]", marker: "COMMON_ONLY"},
+		{id: "unit", tags: "[go, unit]", marker: "UNIT_ONLY"},
+		{id: "integration", tags: "[go, integration]", marker: "INTEGRATION_ONLY"},
+	} {
+		content := strings.Join([]string{
+			"id: " + rule.id,
+			"tags: " + rule.tags,
+			"parser: generic",
+			"status: active",
+			"provenance:",
+			"  created_by: tester",
+			"  source_run: selector-run",
+			"  source_command: selector",
+			"  source_log_sha256: sha256:abc",
+			"  source_span:",
+			"    start_line: 1",
+			"    end_line: 1",
+			"  reason: tag selector fixture",
+			"match:",
+			"  start:",
+			"    regex: '^" + rule.marker + "$'",
+			"  end:",
+			"    any_of:",
+			"      - regex: '^$'",
+			"    max_block_lines: 2",
+			"  include_context:",
+			"    before: 0",
+			"    after: 0",
+			"confidence: high",
+		}, "\n") + "\n"
+		if err := os.WriteFile(filepath.Join(rulesDir, rule.id+".yaml"), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return rawText
+}
+
+func assertBinarySelectedRules(t *testing.T, summary model.Summary, wantTags, wantSignatures []string) {
+	t.Helper()
+	if !slices.Equal(summary.Tags, wantTags) {
+		t.Fatalf("summary tags = %q, want %q", summary.Tags, wantTags)
+	}
+	got := make([]string, 0, len(summary.Failures))
+	for _, failure := range summary.Failures {
+		got = append(got, failure.Signature)
+	}
+	slices.Sort(got)
+	want := slices.Clone(wantSignatures)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("selected rule signatures = %q, want %q", got, want)
+	}
+}
+
 func writeE2EConfig(t *testing.T, repo, script string) {
 	t.Helper()
 	writeE2EConfigWithParser(t, repo, "generic", script)
@@ -520,11 +709,11 @@ func writeE2EConfigWithParser(t *testing.T, repo, parser, script string) {
 		t.Fatal(err)
 	}
 	configText := strings.Join([]string{
-		"version: 1",
+		"version: 2",
 		"commands:",
 		"  unit:",
 		"    command: [\"sh\", \"test.sh\"]",
-		"    lane: unit",
+		"    tags: [unit]",
 		"    parser: " + parser,
 		"    timeout_sec: 10",
 	}, "\n") + "\n"

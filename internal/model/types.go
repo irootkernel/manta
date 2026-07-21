@@ -4,7 +4,7 @@ import "time"
 
 type CommandConfig struct {
 	Command    []string `yaml:"command" json:"command_argv"`
-	Lane       string   `yaml:"lane" json:"lane"`
+	Tags       []string `yaml:"tags" json:"tags"`
 	Parser     string   `yaml:"parser" json:"parser"`
 	TimeoutSec int      `yaml:"timeout_sec" json:"timeout_sec"`
 }
@@ -73,7 +73,7 @@ type RuleExtract struct {
 
 type Rule struct {
 	ID             string         `yaml:"id" json:"id"`
-	Lane           string         `yaml:"lane" json:"lane"`
+	Tags           []string       `yaml:"tags" json:"tags"`
 	Parser         string         `yaml:"parser" json:"parser"`
 	Status         RuleStatus     `yaml:"status" json:"status"`
 	Provenance     RuleProvenance `yaml:"provenance" json:"provenance"`
@@ -93,7 +93,7 @@ type RunRequest struct {
 
 	Mode        RunMode
 	CommandID   string
-	Lane        string
+	Tags        []string
 	CommandArgv []string
 }
 
@@ -150,7 +150,7 @@ type Warning struct {
 
 type RunMetadata struct {
 	CommandID   string    `json:"command_id"`
-	Lane        string    `json:"lane"`
+	Tags        []string  `json:"tags"`
 	Parser      string    `json:"parser"`
 	CommandArgv []string  `json:"command_argv"`
 	ExitCode    int       `json:"exit_code"`
@@ -162,7 +162,7 @@ type RunMetadata struct {
 type Summary struct {
 	Status          RunStatus       `json:"status"`
 	CommandID       string          `json:"command_id"`
-	Lane            string          `json:"lane"`
+	Tags            []string        `json:"tags"`
 	Parser          string          `json:"parser"`
 	CommandArgv     []string        `json:"command_argv"`
 	ExitCode        int             `json:"exit_code"`
@@ -181,7 +181,7 @@ type Summary struct {
 type Status struct {
 	Status            RunStatus       `json:"status"`
 	CommandID         string          `json:"command_id"`
-	Lane              string          `json:"lane"`
+	Tags              []string        `json:"tags"`
 	ExitCode          int             `json:"exit_code"`
 	ExtractorStatus   ExtractorStatus `json:"extractor_status"`
 	SummaryPath       string          `json:"summary_path"`

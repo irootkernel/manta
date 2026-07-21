@@ -9,16 +9,16 @@ This matrix records the primary evidence for every requirement marked complete. 
 |---|---|
 | `MANTA-REQ-RQCLI-001` | `TestDocumentedCLIWorkflowAgainstFreshFixture`; `TestMakeInstallTargetsAndResolver` |
 | `MANTA-REQ-RQCLI-002` | `TestConfiguredRunAndExcerpt`; `TestBinaryConfiguredRunAndExcerpt` |
-| `MANTA-REQ-RQCLI-003` | `TestAdHocRunWithoutConfig`; `TestDocumentedCLIWorkflowAgainstFreshFixture` |
-| `MANTA-REQ-RQCLI-004` | `TestSummarizeRawLogUsesConfigRedaction`; `TestDocumentedCLIWorkflowAgainstFreshFixture` |
+| `MANTA-REQ-RQCLI-003` | `TestAdHocRunWithoutConfig`; `TestBinaryTagsSelectRulesByAllTags`; `TestBinaryTagInterfacesFailBeforeExecution`; `TestDocumentedCLIWorkflowAgainstFreshFixture` |
+| `MANTA-REQ-RQCLI-004` | `TestSummarizeRawLogUsesConfigRedaction`; `TestRunAndSummarizeSelectRulesByAllTags`; `TestBinaryTagsSelectRulesByAllTags`; `TestDocumentedCLIWorkflowAgainstFreshFixture` |
 | `MANTA-REQ-RQCLI-005` | `TestConfiguredRunAndExcerpt`; `TestExcerptRejectsUnsafeReferences` |
 | `MANTA-REQ-RQCLI-006` | `TestTimeoutPreservesPartialArtifacts`; `TestBinaryExtractionContracts` |
 | `MANTA-REQ-RQCFG-001` | `TestConfiguredRunAndExcerpt`; `TestAdHocRunWithoutConfig` |
 | `MANTA-REQ-RQCFG-002` | `TestDocumentedCLIWorkflowAgainstFreshFixture` |
-| `MANTA-REQ-RQCFG-003` | `TestValidateAcceptsImplementedParsers`; `TestConfiguredRunAndExcerpt` |
+| `MANTA-REQ-RQCFG-003` | `TestValidateAcceptsImplementedParsers`; `TestLoadCanonicalizesTags`; `TestValidateRejectsMissingAndUnsafeTags`; `TestBinaryTagsSelectRulesByAllTags` |
 | `MANTA-REQ-RQCFG-004` | `TestSummarizeRawLogUsesConfigRedaction` |
 | `MANTA-REQ-RQCFG-005` | `TestConfiguredRunRedactsSurfacedMetadata`; `TestBinaryJSONRedactsCommandMetadata` |
-| `MANTA-REQ-RQCFG-006` | `TestLoadRejectsUnknownFieldsAndMultipleDocuments`; `TestBinaryRejectsUnknownConfigFields` |
+| `MANTA-REQ-RQCFG-006` | `TestLoadRejectsUnknownFieldsAndMultipleDocuments`; `TestBinaryRejectsUnknownConfigFields`; `TestBinaryTagInterfacesFailBeforeExecution` |
 | `MANTA-REQ-RQRUN-001` | `TestConfiguredRunAndExcerpt`; `TestAdHocRunWithoutConfig` |
 | `MANTA-REQ-RQRUN-002` | `TestConfiguredRunAndExcerpt`; `TestBinaryConfiguredRunAndExcerpt` |
 | `MANTA-REQ-RQRUN-003` | `TestConfiguredRunRedactsSurfacedMetadata`; `TestBinaryJSONRedactsCommandMetadata` |
@@ -46,6 +46,7 @@ This matrix records the primary evidence for every requirement marked complete. 
 | `MANTA-REQ-RQRUL-005` | `TestTestRuleMatchesExpectedSpan`; `TestRuleMatchesCRLFLineEndings` |
 | `MANTA-REQ-RQRUL-006` | `TestRuleDetectsOvermatch`; `TestBinaryRejectsOversizedRuleContext` |
 | `MANTA-REQ-RQRUL-007` | `TestProposeWritesRunLocalProposal`; `TestProposePreservesMeaningfulLineWhitespace` |
+| `MANTA-REQ-RQRUL-008` | `TestLoadApplicableRequiresAllRuleTags`; `TestRunAndSummarizeSelectRulesByAllTags`; `TestBinaryTagsSelectRulesByAllTags` |
 | `MANTA-REQ-RQSEC-001` | `TestRedactSummaryCoversSurfacedMetadata`; `TestBinaryJSONRedactsCommandMetadata` |
 | `MANTA-REQ-RQSEC-002` | `TestConfiguredRunRedactsSurfacedMetadata`; `TestBinaryJSONRedactsCommandMetadata` |
 | `MANTA-REQ-RQSEC-003` | `TestBinaryRejectsUnknownConfigFields`; `TestBinaryRejectsOversizedRuleContext` |

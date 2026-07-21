@@ -41,14 +41,14 @@ func (c *streamCapture) Bytes() []byte {
 	return c.b.Bytes()
 }
 
-func Execute(ctx context.Context, workDir, commandID, lane, parser string, argv []string, timeoutSec int, raw io.Writer) (model.RunOutput, error) {
+func Execute(ctx context.Context, workDir, commandID string, tags []string, parser string, argv []string, timeoutSec int, raw io.Writer) (model.RunOutput, error) {
 	interrupts := make(chan os.Signal, 2)
 	signal.Notify(interrupts, handledSignals()...)
 	defer signal.Stop(interrupts)
-	return executeWithSignals(ctx, workDir, commandID, lane, parser, argv, timeoutSec, raw, interrupts, interruptGracePeriod)
+	return executeWithSignals(ctx, workDir, commandID, tags, parser, argv, timeoutSec, raw, interrupts, interruptGracePeriod)
 }
 
-func executeWithSignals(ctx context.Context, workDir, commandID, lane, parser string, argv []string, timeoutSec int, raw io.Writer, interrupts <-chan os.Signal, gracePeriod time.Duration) (model.RunOutput, error) {
+func executeWithSignals(ctx context.Context, workDir, commandID string, tags []string, parser string, argv []string, timeoutSec int, raw io.Writer, interrupts <-chan os.Signal, gracePeriod time.Duration) (model.RunOutput, error) {
 	if len(argv) == 0 {
 		return model.RunOutput{}, model.NewMantaError(model.ExitCodeConfigError, "execute command", fmt.Errorf("empty argv"))
 	}
@@ -79,19 +79,19 @@ func executeWithSignals(ctx context.Context, workDir, commandID, lane, parser st
 		if errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
 			err = nil
 		}
-		output := completedOutput(started, commandID, lane, parser, argv, capture)
+		output := completedOutput(started, commandID, tags, parser, argv, capture)
 		return classifyWait(output, err)
 	case sig := <-interrupts:
-		return finishInterrupted(started, commandID, lane, parser, argv, capture, cmd, waited, interrupts, sig, gracePeriod), nil
+		return finishInterrupted(started, commandID, tags, parser, argv, capture, cmd, waited, interrupts, sig, gracePeriod), nil
 	case <-runCtx.Done():
 		select {
 		case sig := <-interrupts:
-			return finishInterrupted(started, commandID, lane, parser, argv, capture, cmd, waited, interrupts, sig, gracePeriod), nil
+			return finishInterrupted(started, commandID, tags, parser, argv, capture, cmd, waited, interrupts, sig, gracePeriod), nil
 		default:
 		}
 		_ = killProcess(cmd)
 		<-waited
-		output := completedOutput(started, commandID, lane, parser, argv, capture)
+		output := completedOutput(started, commandID, tags, parser, argv, capture)
 		if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
 			output.Status = model.RunStatusTimedOut
 			output.Metadata.ExitCode = int(model.ExitCodeTimeout)
@@ -103,7 +103,7 @@ func executeWithSignals(ctx context.Context, workDir, commandID, lane, parser st
 	}
 }
 
-func finishInterrupted(started time.Time, commandID, lane, parser string, argv []string, capture *streamCapture, cmd *exec.Cmd, waited <-chan error, interrupts <-chan os.Signal, sig os.Signal, gracePeriod time.Duration) model.RunOutput {
+func finishInterrupted(started time.Time, commandID string, tags []string, parser string, argv []string, capture *streamCapture, cmd *exec.Cmd, waited <-chan error, interrupts <-chan os.Signal, sig os.Signal, gracePeriod time.Duration) model.RunOutput {
 	if err := signalProcess(cmd, sig); err != nil {
 		_ = killProcess(cmd)
 		<-waited
@@ -123,18 +123,18 @@ func finishInterrupted(started time.Time, commandID, lane, parser string, argv [
 			<-waited
 		}
 	}
-	output := completedOutput(started, commandID, lane, parser, argv, capture)
+	output := completedOutput(started, commandID, tags, parser, argv, capture)
 	output.Status = model.RunStatusKilled
 	output.Metadata.ExitCode = signalExitCode(sig)
 	return output
 }
 
-func completedOutput(started time.Time, commandID, lane, parser string, argv []string, capture *streamCapture) model.RunOutput {
+func completedOutput(started time.Time, commandID string, tags []string, parser string, argv []string, capture *streamCapture) model.RunOutput {
 	ended := time.Now().UTC()
 	return model.RunOutput{
 		Metadata: model.RunMetadata{
 			CommandID:   commandID,
-			Lane:        lane,
+			Tags:        append([]string(nil), tags...),
 			Parser:      parser,
 			CommandArgv: append([]string(nil), argv...),
 			StartedAt:   started,

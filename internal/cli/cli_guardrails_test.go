@@ -69,8 +69,8 @@ func TestSummarizeRebuildsArtifactsFromRawLogOnly(t *testing.T) {
 	if summary.Status != model.RunStatusFailed {
 		t.Fatalf("expected failed summarized status, got %s", summary.Status)
 	}
-	if summary.CommandID != "unit" || summary.Lane != "unit" {
-		t.Fatalf("expected unit command/lane inference, got command=%q lane=%q", summary.CommandID, summary.Lane)
+	if summary.CommandID != "unit" || len(summary.Tags) != 1 || summary.Tags[0] != "unit" {
+		t.Fatalf("expected unit command/tag inference, got command=%q tags=%q", summary.CommandID, summary.Tags)
 	}
 	if len(summary.Failures) != 1 || summary.Failures[0].Excerpt == "" {
 		t.Fatalf("expected one failure with excerpt, got %+v", summary.Failures)

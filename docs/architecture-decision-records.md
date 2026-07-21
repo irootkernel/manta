@@ -84,11 +84,11 @@ Different repositories use different test commands and log formats. Manta needs 
 
 ### Decision
 
-Manta reads `.manta/tester.yaml` by default. Command entries define argv arrays, lane, parser, and timeout. Rule files may live under `.manta/tester/rules/*.yaml`.
+Manta reads local-only `.manta/tester.yaml` schema v2 by default. Command entries define argv arrays, canonical tags, parser, and timeout. Rule files may live under `.manta/tester/rules/*.yaml`. The entire `.manta/` directory is ignored local state rather than a portable source contract.
 
 ### Consequences
 
-- Project-local setup is explicit and reviewable.
+- Local setup is explicit and inspectable.
 - Configured commands avoid shell-quoting ambiguity.
 - Invalid config can fail closed before command execution.
 - Specialized parsers and rules can be introduced incrementally.
@@ -104,7 +104,7 @@ Long-running test execution should not require an active agent to wait for compl
 
 ### Decision
 
-Manta writes compact status JSON for polling. Configured redaction is applied to surfaced command ID, lane, and failure/warning signatures before their hashes are calculated. Watcher compatibility is defined by hashing exactly these ordered fields: `command_id`, `status`, `exit_code`, `extractor_status`, `raw_log_sha256`, `failure_signatures`, `warning_signatures`, `summary_path`, and `raw_log_path`. Path fields remain literal references.
+Manta writes compact status JSON for polling. Configured redaction is applied to surfaced command ID, tags, and failure/warning signatures before their hashes are calculated. Watcher compatibility is defined by hashing exactly these ordered fields: `command_id`, comma-joined canonical `tags`, `status`, `exit_code`, `extractor_status`, `raw_log_sha256`, `failure_signatures`, `warning_signatures`, `summary_path`, and `raw_log_path`. Path fields remain literal references.
 
 ### Consequences
 
@@ -169,6 +169,26 @@ The first runnable Manta implementation requires only the `generic` parser. Spec
 - MVP scope stays focused on execution and artifact correctness.
 - Specialized parsers are added against real repository evidence instead of invented formats.
 - Rule proposal remains useful even before runner-specific parsers exist.
+
+## ADR-0009: Canonical tags select local extraction rules
+
+Status: Accepted
+Date: 2026-07-21
+
+### Context
+
+A single execution grouping cannot express independent dimensions such as language, test level, and platform. Project rules also need a deterministic selector without becoming command definitions or pass/fail policy.
+
+### Decision
+
+Config schema v2 replaces the single grouping field with non-empty tags. Tags use safe identifier syntax, are sorted and deduplicated, and are surfaced as JSON arrays. A rule applies only when its parser matches exactly and all of its tags are present on the run; multiple active rules may inspect the same raw log. The entire `.manta/` tree is local-only and ignored by Git.
+
+### Consequences
+
+- Config schema v1 and the removed CLI flag fail closed without a compatibility alias.
+- Broad rules can be shared while more specific tag combinations limit false positives.
+- Tags affect evidence selection and watcher hashes but never authoritative command pass/fail.
+- Local config and rules must be provisioned independently on each machine that uses them.
 
 ## Future ADR candidates
 

@@ -1,7 +1,7 @@
 # Manta Roadmap
 
-Status: v0.1 standalone MVP complete; HARDE hardening epic complete
-Scope: Implementation tracking for the Manta v0.1 standalone baseline and post-baseline hardening
+Status: v0.1 standalone MVP, HARDE hardening epic, and `TAGS-001` complete
+Scope: Implementation tracking for the Manta v0.1 standalone baseline, post-baseline hardening, and schema-v2 tag migration
 
 This roadmap is a delivery record, not an operator guide or a promise that out-of-scope capabilities will be added. See the [integration guide](integration-guide.md) for the current supported/unsupported capability boundary and `todo.md` for explicitly accepted open work.
 
@@ -10,7 +10,7 @@ Task status values: `Planned`, `In Progress`, `Blocked`, `Done`, `Deferred`.
 Existing `Done` entries record completion of the original v0.1 implementation slices. They do not supersede or satisfy the later `HARDE` tasks, which close correctness, safety, verification, and documentation gaps found during repository review.
 
 Current implementation snapshot:
-- `Done`: `SETUP-001` to `SETUP-003`, `RUNNR-001` to `RUNNR-003`, `ARTIF-001` to `ARTIF-003`, `PARSE-001` to `PARSE-003`, `SAFEY-001` to `SAFEY-003`, `CLIUX-001`, `CLIUX-002`, `RULES-001` to `RULES-003`, `DOCUM-001` to `DOCUM-003`, `HARDE-001` to `HARDE-007`
+- `Done`: `SETUP-001` to `SETUP-003`, `RUNNR-001` to `RUNNR-003`, `ARTIF-001` to `ARTIF-003`, `PARSE-001` to `PARSE-003`, `SAFEY-001` to `SAFEY-003`, `CLIUX-001`, `CLIUX-002`, `RULES-001` to `RULES-003`, `DOCUM-001` to `DOCUM-003`, `HARDE-001` to `HARDE-007`, `TAGS-001`
 - `In Progress`: none
 - `Deferred`: none
 - `Planned`: none
@@ -28,7 +28,7 @@ Current implementation snapshot:
 | Task ID | Status | Goal | Reference |
 |---|---|---|---|
 | RUNNR-001 | Done | Implement configured command execution with working-directory control, stdout/stderr capture, ordered log buffering, and raw-log persistence. | `MANTA-REQ-RQCLI-002`, `MANTA-REQ-RQRUN-001` to `MANTA-REQ-RQRUN-004` |
-| RUNNR-002 | Done | Implement ad-hoc command execution with `run --lane <lane> -- <command...>` and generated command IDs for standalone artifacts. | `MANTA-REQ-RQCLI-003`, `MANTA-REQ-RQRUN-001` |
+| RUNNR-002 | Done | Implement ad-hoc command execution with repeatable `--tag` selectors and `adhoc-<UTC timestamp>` command IDs for standalone artifacts. | `MANTA-REQ-RQCLI-003`, `MANTA-REQ-RQRUN-001` |
 | RUNNR-003 | Done | Implement timeout, killed/interrupted status, partial log preservation, and process-compatible exit-code handling. | `MANTA-REQ-RQRUN-005`, `MANTA-REQ-RQRUN-006`, `MANTA-REQ-RQCLI-006` |
 
 ## ARTIF: Artifact writer
@@ -87,7 +87,13 @@ These tasks were implemented as separate, reviewable units in numerical order. A
 | HARDE-001 | Done | Enforce fail-closed artifact containment for run IDs, configured command IDs, rule IDs, and excerpt references; reject absolute paths, traversal, cross-run access, and symlink escape. | Add traversal and symlink tests, then pass focused artifact/config/rules/CLI tests. | `MANTA-REQ-RQHAR-001`, `MANTA-REQ-RQCFG-006`, `MANTA-REQ-RQART-001`, `MANTA-REQ-RQSEC-003` |
 | HARDE-002 | Done | Make command execution interruption-safe by preparing raw evidence before execution, handling and forwarding termination signals, and preserving partial raw/status artifacts with an explicit non-pass result. | Exercise a built binary with SIGINT and SIGTERM, verify partial evidence and status, then pass runner/CLI/E2E tests. | `MANTA-REQ-RQHAR-002`, `MANTA-REQ-RQRUN-003`, `MANTA-REQ-RQRUN-005`, `MANTA-REQ-RQRUN-006` |
 | HARDE-003 | Done | Prevent standalone artifact overwrite by allocating collision-free run directories for repeated configured, ad-hoc, and summarize operations. | Run equivalent commands repeatedly within one timestamp interval, verify distinct paths and checksums, then pass artifact/CLI/E2E tests. | `MANTA-REQ-RQHAR-003`, `MANTA-REQ-RQART-002`, `MANTA-REQ-RQART-007`, `ADR-0003` |
-| HARDE-004 | Done | Complete the redaction boundary for surfaced summary, status, excerpt, and console-safe metadata while leaving original raw logs and literal artifact references unchanged. | Test secrets in argv, identifiers, lanes, evidence-origin paths, failures, and warnings; verify redacted surface fields, unchanged raw evidence, usable artifact references, and final status hashes, then pass safety/CLI/E2E tests. | `MANTA-REQ-RQHAR-004`, `MANTA-REQ-RQCFG-005`, `MANTA-REQ-RQSEC-001`, `MANTA-REQ-RQSEC-002`, `ADR-0003` |
+| HARDE-004 | Done | Complete the redaction boundary for surfaced summary, status, excerpt, and console-safe metadata while leaving original raw logs and literal artifact references unchanged. | Test secrets in argv, identifiers, tags, evidence-origin paths, failures, and warnings; verify redacted surface fields, unchanged raw evidence, usable artifact references, and final status hashes, then pass safety/CLI/E2E tests. | `MANTA-REQ-RQHAR-004`, `MANTA-REQ-RQCFG-005`, `MANTA-REQ-RQSEC-001`, `MANTA-REQ-RQSEC-002`, `ADR-0003` |
 | HARDE-005 | Done | Resolve and implement the specialized-parser miss and internal-error artifact contracts without allowing extraction behavior to override command truth. | Add contract tests for all extractor states and retained run states, then pass extract/CLI/guardrail tests. | `MANTA-REQ-RQHAR-005`, `MANTA-REQ-RQEXT-005` to `MANTA-REQ-RQEXT-007`, `MANTA-REQ-RQSEC-005`, `ADR-0002` |
 | HARDE-006 | Done | Synchronize executable CLI behavior and durable documentation, including `--verbose`, `--no-color`, self-contained rule examples, Markdown output, version/toolchain resolver guidance, and roadmap/todo status wording. | Execute every documented command against a fresh fixture, compare generated output with examples, and pass CLI/toolchain E2E tests plus `git diff --check`. | `MANTA-REQ-RQHAR-006`, `MANTA-REQ-RQCLI-001` to `MANTA-REQ-RQCLI-006`, `MANTA-REQ-RQDOC-001` to `MANTA-REQ-RQDOC-004` |
 | HARDE-007 | Done | Run the complete hardening regression and release-readiness gate across standalone and fixed run-scoped layouts, then update hardening statuses only from observed evidence. | Pass `make test`, configured/ad-hoc/summarize/excerpt/rules smokes, path and signal probes, both artifact layouts, install/toolchain checks, and `git diff --check`. | `MANTA-REQ-RQHAR-007`, `MANTA-REQ-RQDOC-004` |
+
+## TAGS: Rule selection metadata
+
+| Task ID | Status | Goal | Reference |
+|---|---|---|---|
+| TAGS-001 | Done | Replace the single execution grouping label with canonical multi-value tags across schema v2, CLI, rule selection, artifacts, watcher hashes, tests, and documentation. | `MANTA-REQ-RQCLI-003`, `MANTA-REQ-RQCFG-003`, `MANTA-REQ-RQRUL-008`, `MANTA-REQ-RQWAT-002` |

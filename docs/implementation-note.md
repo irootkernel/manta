@@ -1,7 +1,7 @@
 # Manta Implementation Note
 
-Status: v0.1 baseline complete; HARDE hardening complete (`HARDE-001` through `HARDE-007` complete)
-Scope: Maintainer guidance for the standalone Manta v0.1 implementation and future changes
+Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, and `TAGS-001` complete
+Scope: Maintainer guidance for the standalone Manta v0.1 implementation, schema-v2 tags, and future changes
 
 This document explains implementation constraints and verification expectations for contributors. It is not the parent-project adoption contract; integrators should start with the [integration guide](integration-guide.md).
 
@@ -38,7 +38,7 @@ internal/safety/
 - Store and pass command configuration as argv arrays, not shell strings.
 - In Go, prefer direct process execution over shell invocation for configured commands.
 - Capture stdout and stderr ordering when the selected approach makes that practical. If perfect ordering is not possible, document the limitation and preserve both streams clearly.
-- Record command argv, command ID, lane, parser, start time, end time, duration, exit code, and execution status in derived artifacts; the raw log itself contains only original stdout/stderr evidence.
+- Record command argv, command ID, canonical tags, parser, start time, end time, duration, exit code, and execution status in derived artifacts; the raw log itself contains only original stdout/stderr evidence.
 - Timeout must not become pass. Emit `timed_out` and preserve partial logs.
 - Open the contained raw-log artifact before starting the command and stream stdout/stderr into it during execution.
 - On Unix, run the command in its own process group, forward SIGINT/SIGTERM to that group, allow a two-second grace period, then force-kill remaining group members.
@@ -111,7 +111,7 @@ Fixture-backed example using the Vitest log under `internal/extract/testdata/vit
 
 ```yaml
 id: vitest-empty-state-v1
-lane: unit
+tags: [unit, vitest]
 parser: vitest
 status: active
 provenance:

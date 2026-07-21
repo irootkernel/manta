@@ -1,7 +1,7 @@
 # Manta Requirement Specs
 
-Status: v0.1 baseline complete; hardening requirements complete (`HARDE-001` through `HARDE-007` complete)
-Scope: Manta v0.1 standalone baseline and post-baseline hardening
+Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, and `TAGS-001` complete
+Scope: Manta v0.1 standalone baseline, post-baseline hardening, and schema-v2 tag selectors
 Source context: standalone deterministic Manta v0.1 CLI behavior and evidence contracts.
 
 ## Requirement status legend
@@ -17,8 +17,8 @@ Implementation note: the original v0.1 roadmap and the recorded `RQHAR` hardenin
 
 - [x] `MANTA-REQ-RQCLI-001` Provide a standalone CLI binary named `manta`.
 - [x] `MANTA-REQ-RQCLI-002` Support configured command execution with `manta run <command-id>`.
-- [x] `MANTA-REQ-RQCLI-003` Support ad-hoc command execution with `manta run --lane <lane> -- <command...>`.
-- [x] `MANTA-REQ-RQCLI-004` Support raw-log summarization with `manta summarize <raw-log>`.
+- [x] `MANTA-REQ-RQCLI-003` Support ad-hoc command execution with repeatable tags using `manta run --tag <tag> [--tag <tag> ...] -- <command...>`.
+- [x] `MANTA-REQ-RQCLI-004` Support raw-log summarization with optional repeatable tags using `manta summarize [--tag <tag> ...] <raw-log>`.
 - [x] `MANTA-REQ-RQCLI-005` Support excerpt retrieval with `manta excerpt --summary <summary-path> <failure-id>`.
 - [x] `MANTA-REQ-RQCLI-006` Return process-compatible exit codes: successful test commands exit `0`, failed test commands return the underlying non-zero exit code when possible, and Manta internal errors use distinct documented codes.
 
@@ -26,17 +26,17 @@ Implementation note: the original v0.1 roadmap and the recorded `RQHAR` hardenin
 
 - [x] `MANTA-REQ-RQCFG-001` Read default project config from `.manta/tester.yaml`.
 - [x] `MANTA-REQ-RQCFG-002` Allow explicit config override with a CLI flag.
-- [x] `MANTA-REQ-RQCFG-003` Define command entries with `command` argv arrays, `lane`, `parser`, and `timeout_sec`.
+- [x] `MANTA-REQ-RQCFG-003` Define schema-v2 command entries with `command` argv arrays, non-empty `tags`, `parser`, and `timeout_sec`.
 - [x] `MANTA-REQ-RQCFG-004` Define noise filters that remove low-value lines from summaries without removing raw-log content.
 - [x] `MANTA-REQ-RQCFG-005` Define redaction rules that apply to summary, status, and excerpt outputs.
-- [x] `MANTA-REQ-RQCFG-006` Validate config before execution and fail closed on invalid command IDs, unsafe timeout values, malformed redaction rules, unsupported parser labels, or invalid rule files.
+- [x] `MANTA-REQ-RQCFG-006` Validate config before execution and fail closed on unsupported schema versions, invalid command IDs, missing or unsafe tags, unsafe timeout values, malformed redaction rules, unsupported parser labels, or invalid rule files.
 
 ## RQRUN: Deterministic command runner
 
 - [x] `MANTA-REQ-RQRUN-001` Execute configured and ad-hoc commands in the target repository working directory.
 - [x] `MANTA-REQ-RQRUN-002` Capture stdout and stderr while preserving ordering when possible.
 - [x] `MANTA-REQ-RQRUN-003` Preserve raw logs exactly as observed before summary noise filtering.
-- [x] `MANTA-REQ-RQRUN-004` Record exit code, start time, end time, duration, command argv, command ID, lane, and parser.
+- [x] `MANTA-REQ-RQRUN-004` Record exit code, start time, end time, duration, command argv, command ID, canonical tags, and parser.
 - [x] `MANTA-REQ-RQRUN-005` Enforce per-command timeout and report `timed_out` status without claiming pass.
 - [x] `MANTA-REQ-RQRUN-006` Handle interrupted/killed runs with explicit status and partial raw-log preservation.
 
@@ -44,7 +44,7 @@ Implementation note: the original v0.1 roadmap and the recorded `RQHAR` hardenin
 
 - [x] `MANTA-REQ-RQART-001` Write raw log artifacts to `.manta/runs/scoped/<run_id>/artifacts/test/<command-id>.raw.log` when a run ID is supplied.
 - [x] `MANTA-REQ-RQART-002` Support standalone artifact output under `.manta/` or a caller-specified output directory when `--run-id` is not supplied.
-- [x] `MANTA-REQ-RQART-003` Write summary JSON with execution status, command metadata, raw-log path, raw-log SHA-256, extractor status, failure count, warning count, failure spans, warning spans, and excerpt references.
+- [x] `MANTA-REQ-RQART-003` Write summary JSON with execution status, command ID, canonical tags, parser and argv metadata, raw-log path, raw-log SHA-256, extractor status, failure count, warning count, failure spans, warning spans, and excerpt references.
 - [x] `MANTA-REQ-RQART-004` Write summary Markdown for human review.
 - [x] `MANTA-REQ-RQART-005` Write status JSON suitable for no-agent watchers.
 - [x] `MANTA-REQ-RQART-006` Write failure excerpt files for bounded review without replaying full raw logs.
@@ -69,19 +69,20 @@ Implementation note: the original v0.1 roadmap and the recorded `RQHAR` hardenin
 - [x] `MANTA-REQ-RQRUL-005` Test rules against raw-log fixtures and expected spans.
 - [x] `MANTA-REQ-RQRUL-006` Detect overmatch, unsupported or invalid regex, excessive block length, and invalid capture groups.
 - [x] `MANTA-REQ-RQRUL-007` Keep run-local proposed rules separate from project-local active rules.
+- [x] `MANTA-REQ-RQRUL-008` Select rules only when the parser matches and every canonical rule tag is present on the run, allowing multiple active rules to inspect one raw log.
 
 ## RQSEC: Safety, redaction, and fail-closed behavior
 
 - [x] `MANTA-REQ-RQSEC-001` Redact configured secrets and sensitive values from summaries, excerpts, and status files while retaining literal artifact-reference fields required for deterministic lookup.
 - [x] `MANTA-REQ-RQSEC-002` Preserve raw logs as original evidence, clearly mark that they may contain unredacted data, and avoid treating them as share-safe artifacts.
-- [x] `MANTA-REQ-RQSEC-003` Fail closed on malformed config, missing command definitions, invalid or unsupported regex, artifact-write failure, or unsupported parser configuration.
+- [x] `MANTA-REQ-RQSEC-003` Fail closed on unsupported config versions, malformed config, missing command definitions, missing or unsafe tags, invalid or unsupported regex, artifact-write failure, or unsupported parser configuration.
 - [x] `MANTA-REQ-RQSEC-004` Bound extracted block size, excerpt size, summary size, and regex input size.
 - [x] `MANTA-REQ-RQSEC-005` Avoid broad fallback behavior; a specialized-parser miss reports `no_match` after a pass and `degraded` after a non-pass result, while an accepted span with missing key metadata remains `partial`.
 
 ## RQWAT: Watcher status compatibility
 
 - [x] `MANTA-REQ-RQWAT-001` Produce deterministic status JSON that no-agent watchers can poll without invoking an LLM.
-- [x] `MANTA-REQ-RQWAT-002` Define watcher compatibility around exactly these status-hash inputs: command ID, status, exit code, extractor status, raw-log checksum, failure signatures, warning signatures, summary path, and raw-log path.
+- [x] `MANTA-REQ-RQWAT-002` Define watcher compatibility around exactly these status-hash inputs: command ID, canonical tags, status, exit code, extractor status, raw-log checksum, failure signatures, warning signatures, summary path, and raw-log path.
 - [x] `MANTA-REQ-RQWAT-003` Keep watcher-facing output compact and action-oriented.
 
 ## RQDOC: Documentation and operator guidance

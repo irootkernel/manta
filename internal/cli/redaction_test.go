@@ -11,7 +11,7 @@ func TestRedactSummaryCoversSurfacedMetadata(t *testing.T) {
 	t.Parallel()
 	summary := model.Summary{
 		CommandID:   "command_secret_id",
-		Lane:        "lane-secret_lane",
+		Tags:        []string{"unit", "tag-secret_tag"},
 		Parser:      "secret_parser",
 		CommandArgv: []string{"runner", "secret_arg"},
 		RawLog:      ".manta/runs/standalone/secret_path/unit.raw.log",
@@ -41,7 +41,7 @@ func TestRedactSummaryCoversSurfacedMetadata(t *testing.T) {
 		want  string
 	}{
 		{"command id", summary.CommandID, "command_<redacted>"},
-		{"lane", summary.Lane, "lane-<redacted>"},
+		{"tag", summary.Tags[0], "tag-<redacted>"},
 		{"parser", summary.Parser, "<redacted>"},
 		{"argv", summary.CommandArgv[1], "<redacted>"},
 		{"failure signature", summary.Failures[0].Signature, "<redacted>"},
