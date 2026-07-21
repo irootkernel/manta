@@ -1,6 +1,6 @@
 # KAT User Interface
 
-Status: Complete through `HARDE-006`
+Status: Complete through `HARDE-007`
 Scope: CLI-first interface for KAT v0.1
 
 ## Interface principles

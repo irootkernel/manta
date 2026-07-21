@@ -1,7 +1,7 @@
 # KAT Todo
 
-Status: Hardening epic in progress
-Scope: Open documentation and implementation follow-up notes
+Status: Hardening epic complete
+Scope: Documentation and implementation follow-up notes
 
 ## Todo status legend
 
@@ -12,14 +12,16 @@ Scope: Open documentation and implementation follow-up notes
 
 ## Active items
 
-### TD-HARDE-001: Complete the post-baseline hardening epic
-
-Status: Active
-References: `HARDE-001` to `HARDE-007`, `KAT-REQ-RQHAR-001` to `KAT-REQ-RQHAR-007`
-
-`HARDE-001` through `HARDE-006` are complete. Continue with `HARDE-007` as the final separate reviewable PR. It must retain its focused evidence and pass the affected existing suites before its roadmap status changes to `Done`; passing an earlier focused test does not close the epic.
+None.
 
 ## Completed items
+
+### TD-HARDE-001: Complete the post-baseline hardening epic
+
+Status: Done
+References: `HARDE-001` to `HARDE-007`, `KAT-REQ-RQHAR-001` to `KAT-REQ-RQHAR-007`
+
+`HARDE-001` through `HARDE-007` are complete. HARDE-007 passed its roadmap verification before moving to `Done`.
 
 ### TD-RULE-001: Add parser and rule examples from real fixture logs
 

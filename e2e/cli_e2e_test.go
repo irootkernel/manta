@@ -429,25 +429,46 @@ func TestBinaryArtifactContainment(t *testing.T) {
 		}
 	})
 
-	t.Run("Kkachi runs symlink escape is rejected", func(t *testing.T) {
-		repo := t.TempDir()
-		writeE2EConfig(t, repo, "#!/bin/sh\necho ok\n")
-		external := t.TempDir()
-		if err := os.Symlink(external, filepath.Join(repo, ".kkachi", "runs")); err != nil {
-			t.Fatal(err)
-		}
-		cmd := exec.Command(bin, "--repo", repo, "--run-id", "run-001", "run", "unit")
-		cmd.Dir = repo
-		out, err := cmd.CombinedOutput()
-		requireExitCode(t, err, int(model.ExitCodeArtifactError), out)
-		entries, err := os.ReadDir(external)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(entries) != 0 {
-			t.Fatalf("expected no artifacts outside the repository, got %d entries", len(entries))
-		}
-	})
+	for _, test := range []struct {
+		name    string
+		runsDir string
+		runID   string
+	}{
+		{name: "standalone runs", runsDir: filepath.Join(".kat", "runs")},
+		{name: "Kkachi runs", runsDir: filepath.Join(".kkachi", "runs"), runID: "run-001"},
+	} {
+		t.Run(test.name+" symlink escape is rejected", func(t *testing.T) {
+			repo := t.TempDir()
+			writeE2EConfig(t, repo, "#!/bin/sh\ntouch command-ran\n")
+			runsPath := filepath.Join(repo, test.runsDir)
+			if err := os.MkdirAll(filepath.Dir(runsPath), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			external := t.TempDir()
+			if err := os.Symlink(external, runsPath); err != nil {
+				t.Fatal(err)
+			}
+			args := []string{"--repo", repo}
+			if test.runID != "" {
+				args = append(args, "--run-id", test.runID)
+			}
+			args = append(args, "run", "unit")
+			cmd := exec.Command(bin, args...)
+			cmd.Dir = repo
+			out, err := cmd.CombinedOutput()
+			requireExitCode(t, err, int(model.ExitCodeArtifactError), out)
+			if _, err := os.Stat(filepath.Join(repo, "command-ran")); !os.IsNotExist(err) {
+				t.Fatalf("expected command not to execute, stat error=%v", err)
+			}
+			entries, err := os.ReadDir(external)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) != 0 {
+				t.Fatalf("expected no artifacts outside the repository, got %d entries", len(entries))
+			}
+		})
+	}
 
 	for _, test := range []struct {
 		name      string

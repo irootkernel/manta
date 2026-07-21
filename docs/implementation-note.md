@@ -1,13 +1,13 @@
 # KAT Implementation Note
 
-Status: v0.1 baseline complete; HARDE hardening in progress (`HARDE-001` through `HARDE-006` complete)
+Status: v0.1 baseline complete; HARDE hardening complete (`HARDE-001` through `HARDE-007` complete)
 Scope: Guidance for implementing complex KAT v0.1 and post-baseline hardening areas without KAS/KAH dependency
 
 ## Implementation posture
 
 Build KAT as a small deterministic Go CLI first. Do not add KAS, KAH, GJC session, or authority concepts to the core package. Treat optional Kkachi artifact layout as output path compatibility only.
 
-The current implementation baseline is not the end of hardening work. Use `roadmap.md#harde-post-baseline-hardening-and-contract-closure` and `requirements-specs.md#rqhar-post-baseline-hardening-and-contract-closure` as the implementation sequence and contract for the next PRs. Do not mark a `HARDE` task complete from code or proxy test success alone; run and observe every verification condition recorded in its roadmap row.
+The post-baseline HARDE sequence is complete. Preserve the contracts in `roadmap.md#harde-post-baseline-hardening-and-contract-closure` and `requirements-specs.md#rqhar-post-baseline-hardening-and-contract-closure`, and rerun affected roadmap verification for future changes.
 
 ## Suggested package boundaries
 
@@ -174,7 +174,7 @@ Tests should cover:
 - Noise filtering in summary while raw log remains unchanged.
 - Rule test with expected span.
 - Rule overmatch rejection.
-- Artifact path generation for `.kat/`, caller-selected `--output-dir`, and `.kkachi/runs/<run_id>/...` layouts.
+- Artifact path generation for `.kat/`, caller-selected `--output-dir`, and `.kkachi/runs/<run_id>/...` layouts, plus built-binary rejection of external `.kat/runs` and `.kkachi/runs` symlinks before command execution.
 - Sequential, goroutine-concurrent, and cross-process standalone directory allocation within one UTC-second interval, including configured, ad-hoc, and summarize evidence preservation.
 - Invalid run, command, rule, and failure IDs failing before command execution or artifact writes.
 - Traversal, cross-run excerpt access, dangling links, and external symlink escape failing closed across artifact and rule operations.
@@ -184,14 +184,16 @@ Tests should cover:
 - Extraction internal errors after pass, failure, timeout, kill, and standalone summarize, including built-binary run/summarize probes for preserved raw evidence, summary/status hashes, Markdown output, and CLI exit behavior.
 - Exact generated Markdown shape for a fixed summary, plus a built-binary fresh-fixture workflow covering version, configured/ad-hoc run, summarize, excerpt, JSON output, and the complete rule lifecycle.
 - Unsupported historical `--verbose` and `--no-color` placeholders failing closed with config exit code `2`.
+- Actual `make install` and `make install-toolchain` execution in isolated temporary roots, including installed-version and resolver checks.
 - Toolchain resolver selection from `KKACHI_KAT_BIN`, absolute `kat.binary_path`, and versioned `kat.cli_version`, including argument forwarding and fail-closed missing, unsafe, or mismatched selections.
 
 ## Release-readiness checklist
 
-Before tagging `v0.1.3`, verify all of the following:
+Before the next release tag, verify all of the following:
 
 - `go build ./cmd/kkachi-agent-tester`
 - `make test`
+- `make install` and `make install-toolchain` in isolated temporary roots, including installed-version and resolver checks
 - configured run smoke test
 - ad-hoc run smoke test
 - built-binary SIGINT/SIGTERM interruption smoke across standalone and `--run-id` layouts, including partial raw evidence, `killed` status, and exit codes `130` and `143`
@@ -200,7 +202,7 @@ Before tagging `v0.1.3`, verify all of the following:
 - rule lifecycle coverage for `list/search/show/create/update/delete/test/propose`
 - fresh-fixture execution of every documented KAT CLI command with generated Markdown compared to the documented shape
 - toolchain resolver status and forwarding checks for environment, absolute-path metadata, and versioned metadata selection
-- artifact path and containment verification for `.kat/`, `--output-dir`, and `.kkachi/runs/<run_id>/...`
+- artifact path and containment verification for `.kat/`, `--output-dir`, and `.kkachi/runs/<run_id>/...`, including external `.kat/runs` and `.kkachi/runs` symlink rejection
 - collision checks confirming repeated standalone operations retain distinct raw, summary, Markdown, status, and excerpt artifacts with unchanged raw-log checksums
 - watcher status JSON compatibility, including status-hash inputs
 - release notes mention known limitations, especially raw-log redaction policy and rule proposals remaining run-local until promoted

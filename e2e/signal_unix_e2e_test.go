@@ -31,6 +31,8 @@ func TestBinaryPreservesInterruptedEvidence(t *testing.T) {
 		runID    string
 	}{
 		{name: "sigint standalone", signal: syscall.SIGINT, exitCode: 130},
+		{name: "sigint run id", signal: syscall.SIGINT, exitCode: 130, runID: "int-run"},
+		{name: "sigterm standalone", signal: syscall.SIGTERM, exitCode: 143},
 		{name: "sigterm run id", signal: syscall.SIGTERM, exitCode: 143, runID: "term-run"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
