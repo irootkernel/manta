@@ -1,6 +1,6 @@
 # Manta Todo
 
-Status: 5 open items from the v0.1.4 release-readiness review
+Status: 4 open items from the v0.1.4 release-readiness review
 Scope: Documentation and implementation follow-up notes
 
 ## Todo status legend
@@ -16,13 +16,6 @@ Tag and publish `v0.1.4` only after the items below are closed and the release-r
 ## Open items
 
 Items are listed in recommended fix order. Line references were verified against the current tree and may drift as fixes land.
-
-### RELRV-005 `Open` — Bound rule/config input sizes (YAML amplification, propose raw-log read)
-
-- Severity: medium.
-- Problem: (a) strict YAML decoding has no Manta-side bound against anchor/alias scalar-reuse amplification — a ~1 MiB rule or config file can decode into tens of MiB of strings on every invocation that loads config or rules; only yaml.v3's internal excessive-aliasing guard applies, and it does not cover flat large-scalar reuse. (b) `rules propose` reads the entire `--raw-log` with `os.ReadFile` and splits it with no size cap, unlike every other rule-facing entry point, which is bounded at 256 KiB.
-- Evidence: `internal/safety/yaml.go:12` and its callers `internal/config/config.go:43`, `internal/rules/storage.go:316`, `internal/cli/rules.go:272`; `internal/rules/storage.go:196-207`.
-- Done when: explicit size caps on config, rule, and proposal source files and on the propose raw-log input fail closed with config exit `2`, consistent with `MANTA-REQ-RQSEC-004`, with tests for each entry point.
 
 ### RELRV-006 `Open` — Interrupted-run hash integrity; defensive rule-regex handling
 

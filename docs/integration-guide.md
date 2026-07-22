@@ -134,6 +134,7 @@ Integration rules:
 - Set `timeout_sec` from `1` to `86400`; invalid config fails before execution.
 - Command IDs, run IDs, rule IDs, and tags must match `[A-Za-z0-9][A-Za-z0-9_-]*`.
 - Config and rule files accept one YAML document, reject unknown fields, and use Go RE2 regex syntax.
+- Config YAML, stored/imported rule YAML, and `rules propose --raw-log` inputs are limited to 256 KiB; oversized inputs fail with config exit code `2` before commands or rule/proposal writes.
 - Tags are sorted and deduplicated. A rule applies when its parser matches and all of its tags are present on the run; multiple active rules may apply to one raw log.
 
 ## 3. Choose an invocation layout

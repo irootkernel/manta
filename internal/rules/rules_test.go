@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -477,6 +478,82 @@ func TestProposeRejectsSymlinkEscape(t *testing.T) {
 	}
 }
 
+func TestLoadAllEnforcesRuleFileSizeLimit(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		size    int
+		wantErr bool
+	}{
+		{name: "exact limit", size: safety.MaxConfigRuleInputBytes},
+		{name: "one byte over", size: safety.MaxConfigRuleInputBytes + 1, wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			repo := t.TempDir()
+			rulesDir := RulesDir(repo)
+			if err := os.MkdirAll(rulesDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			base, err := yaml.Marshal(validRule("bounded-v1"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			base = append(base, '#')
+			data := append(base, bytes.Repeat([]byte("x"), test.size-len(base))...)
+			if err := os.WriteFile(filepath.Join(rulesDir, "bounded-v1.yaml"), data, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			loaded, err := LoadAll(repo)
+			if test.wantErr {
+				if model.ExitCodeFor(err) != int(model.ExitCodeConfigError) || !strings.Contains(err.Error(), "input exceeds 262144 bytes") {
+					t.Fatalf("expected rule size error, got %v", err)
+				}
+				return
+			}
+			if err != nil || len(loaded) != 1 || loaded[0].ID != "bounded-v1" {
+				t.Fatalf("expected exact-limit rule to load, rules=%+v err=%v", loaded, err)
+			}
+		})
+	}
+}
+
+func TestProposeEnforcesRawLogInputSizeLimit(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		size    int
+		wantErr bool
+	}{
+		{name: "exact limit", size: safety.MaxConfigRuleInputBytes},
+		{name: "one byte over", size: safety.MaxConfigRuleInputBytes + 1, wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			repo := t.TempDir()
+			rawPath := filepath.Join(repo, "fixture.raw.log")
+			prefix := []byte("TypeError: boom\n")
+			raw := append(prefix, bytes.Repeat([]byte("x"), test.size-len(prefix))...)
+			if err := os.WriteFile(rawPath, raw, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			proposal, err := Propose(repo, []string{"unit"}, "generic", rawPath, 1, 1)
+			if test.wantErr {
+				if model.ExitCodeFor(err) != int(model.ExitCodeConfigError) || !strings.Contains(err.Error(), "input exceeds 262144 bytes") {
+					t.Fatalf("expected proposal input size error, got %v", err)
+				}
+				if _, statErr := os.Stat(ProposedRulesDir(repo)); !os.IsNotExist(statErr) {
+					t.Fatalf("oversized proposal created output directory: %v", statErr)
+				}
+				return
+			}
+			if err != nil || proposal.Path == "" {
+				t.Fatalf("expected exact-limit proposal to succeed, proposal=%+v err=%v", proposal, err)
+			}
+		})
+	}
+}
+
 func TestTestRuleMatchesExpectedSpan(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
@@ -494,6 +571,31 @@ func TestTestRuleMatchesExpectedSpan(t *testing.T) {
 	}
 	if !result.Passed || result.FailureCount != 1 {
 		t.Fatalf("expected passing rule test, got %+v", result)
+	}
+}
+
+func TestTestRuleBoundsFixtureBeforeExtraction(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	if _, err := Create(repo, validRule("generic-v1")); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	rawPath := filepath.Join(repo, "fixture.raw.log")
+	prefix := []byte("TypeError: boom\n\n")
+	if err := os.WriteFile(rawPath, append(prefix, bytes.Repeat([]byte("x"), safety.MaxConfigRuleInputBytes-len(prefix))...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if result, err := TestRule(repo, "generic-v1", rawPath, 1, 2); err != nil || !result.Passed {
+		t.Fatalf("exact-limit fixture failed: result=%+v err=%v", result, err)
+	}
+	if err := os.WriteFile(rawPath, bytes.Repeat([]byte("x"), safety.MaxConfigRuleInputBytes+1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := TestRule(repo, "generic-v1", rawPath, 1, 1); model.ExitCodeFor(err) != int(model.ExitCodeParserError) || !safety.IsInputTooLarge(err) {
+		t.Fatalf("oversized fixture error=%v exit=%d", err, model.ExitCodeFor(err))
+	}
+	if _, err := TestRule(repo, "generic-v1", filepath.Join(repo, "missing.raw.log"), 1, 1); model.ExitCodeFor(err) != int(model.ExitCodeConfigError) {
+		t.Fatalf("missing fixture error=%v exit=%d", err, model.ExitCodeFor(err))
 	}
 }
 

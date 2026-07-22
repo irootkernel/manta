@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -264,7 +263,7 @@ func rulesProposeCommand(opts globalOptions, args []string, stdout, stderr io.Wr
 }
 
 func readRuleInput(path string) (model.Rule, error) {
-	data, err := os.ReadFile(path)
+	data, err := safety.ReadFileLimited(path)
 	if err != nil {
 		return model.Rule{}, model.NewMantaError(model.ExitCodeConfigError, "read rule input", err)
 	}

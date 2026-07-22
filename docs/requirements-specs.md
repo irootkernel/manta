@@ -1,6 +1,6 @@
 # Manta Requirement Specs
 
-Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, `TAGS-001`, and `RELRV-001` through `RELRV-004` complete
+Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, `TAGS-001`, and `RELRV-001` through `RELRV-005` complete
 Scope: Manta v0.1 standalone baseline, post-baseline hardening, schema-v2 tag selectors, and release-readiness follow-up
 Source context: standalone deterministic Manta v0.1 CLI behavior and evidence contracts.
 
@@ -76,7 +76,7 @@ Implementation note: the original v0.1 roadmap and the recorded `RQHAR` hardenin
 - [x] `MANTA-REQ-RQSEC-001` Redact configured secrets and sensitive values from summaries, excerpts, and status files while retaining literal artifact-reference fields required for deterministic lookup.
 - [x] `MANTA-REQ-RQSEC-002` Preserve raw logs as original evidence, clearly mark that they may contain unredacted data, and avoid treating them as share-safe artifacts.
 - [x] `MANTA-REQ-RQSEC-003` Fail closed on unsupported config versions, malformed config, missing command definitions, missing or unsafe tags, invalid or unsupported regex, artifact-write failure, or unsupported parser configuration.
-- [x] `MANTA-REQ-RQSEC-004` Bound extracted block size, excerpt size, summary size, regex input size, and surfaced evidence counts. Retain at most 50 failures and 50 warnings, reducing deterministic prefixes further when the rendered JSON or Markdown byte budget requires it by retaining the largest fitting failure prefix first and using the remaining budget for the largest warning prefix. For execution and summarize logs larger than 256 KiB, scan only the final bounded complete-line window and report degraded extraction while preserving the full raw log; rule fixture testing remains fail closed above the input bound.
+- [x] `MANTA-REQ-RQSEC-004` Bound extracted block size, excerpt size, summary size, regex input size, config/rule input-file size, and surfaced evidence counts. Retain at most 50 failures and 50 warnings, reducing deterministic prefixes further when the rendered JSON or Markdown byte budget requires it by retaining the largest fitting failure prefix first and using the remaining budget for the largest warning prefix. For execution and summarize logs larger than 256 KiB, scan only the final bounded complete-line window and report degraded extraction while preserving the full raw log; rule fixture testing remains fail closed above the input bound. Config YAML, stored and imported rule YAML, and `rules propose --raw-log` inputs larger than 256 KiB fail closed with config exit code `2` before decoding, command execution, or output creation.
 - [x] `MANTA-REQ-RQSEC-005` Avoid broad fallback behavior; a specialized-parser miss reports `no_match` after a pass and `degraded` after a non-pass result, while an accepted span with missing key metadata remains `partial`.
 
 ## RQWAT: Watcher status compatibility

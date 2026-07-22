@@ -1,12 +1,14 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/irootkernel/manta/internal/model"
+	"github.com/irootkernel/manta/internal/safety"
 )
 
 func TestValidateAcceptsImplementedParsers(t *testing.T) {
@@ -61,6 +63,39 @@ func TestLoadRejectsUnknownFieldsAndMultipleDocuments(t *testing.T) {
 			}
 			if _, _, err := Load(repo, path, false); err == nil {
 				t.Fatalf("expected %s to fail closed", test.name)
+			}
+		})
+	}
+}
+
+func TestLoadEnforcesInputSizeLimit(t *testing.T) {
+	t.Parallel()
+	base := []byte("version: 2\ncommands: {}\n#")
+	for _, test := range []struct {
+		name    string
+		size    int
+		wantErr bool
+	}{
+		{name: "exact limit", size: safety.MaxConfigRuleInputBytes},
+		{name: "one byte over", size: safety.MaxConfigRuleInputBytes + 1, wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			repo := t.TempDir()
+			path := filepath.Join(repo, "tester.yaml")
+			data := append(append([]byte(nil), base...), bytes.Repeat([]byte("x"), test.size-len(base))...)
+			if err := os.WriteFile(path, data, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			cfg, _, err := Load(repo, path, false)
+			if test.wantErr {
+				if model.ExitCodeFor(err) != int(model.ExitCodeConfigError) || !strings.Contains(err.Error(), "input exceeds 262144 bytes") {
+					t.Fatalf("expected config size error, got %v", err)
+				}
+				return
+			}
+			if err != nil || cfg.Version != 2 {
+				t.Fatalf("expected exact-limit config to load, cfg=%+v err=%v", cfg, err)
 			}
 		})
 	}

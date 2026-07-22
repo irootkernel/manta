@@ -1,6 +1,6 @@
 # Manta User Interface
 
-Status: Complete through `HARDE-007`, `TAGS-001`, and `RELRV-004`
+Status: Complete through `HARDE-007`, `TAGS-001`, and `RELRV-005`
 Scope: CLI-first interface for Manta v0.1, including schema-v2 tag selectors and release-readiness follow-up
 
 This is the complete command reference. First-time users should begin with the repository [README](../README.md); parent-project owners should use the [integration guide](integration-guide.md) for ownership boundaries and adoption steps.
@@ -249,6 +249,8 @@ manta rules delete generic-v1 --reason "superseded by v2"
 ```
 
 For project rules, `max_block_lines` counts the matched block including its start line. The matched block plus `include_context.before` and `include_context.after` must not exceed 160 lines; overbroad or overflow-sized values fail closed with config exit code `2`.
+
+Config YAML, stored rule YAML, `rules create/update --file` inputs, and `rules propose --raw-log` inputs may be at most 256 KiB. Larger files fail with config exit code `2` before a command runs or a rule/proposal is created or replaced. This does not change execution and summarize raw-log preservation or the rule-test fixture contract described below.
 
 Tags are rule selectors, not command selectors or automatic rule generators. The parser must match exactly, and every tag declared by a rule must be present on the run. For a run tagged `[go, unit]`, rules tagged `[go]`, `[unit]`, and `[go, unit]` are applicable, while `[integration]` is not. All applicable active rules inspect the raw log first; the selected parser runs only when those rules produce no failure. `rules propose` writes only a local candidate under `.manta/rule-proposals/`; an operator must review, test, and explicitly create it before it becomes active under `.manta/tester/rules/`.
 

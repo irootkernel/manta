@@ -30,7 +30,7 @@ func ResolveConfigPath(repoRoot, override string) string {
 
 func Load(repoRoot, override string, allowMissing bool) (model.Config, string, error) {
 	path := ResolveConfigPath(repoRoot, override)
-	data, err := os.ReadFile(path)
+	data, err := safety.ReadFileLimited(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) && allowMissing && override == "" {
 			cfg := model.Config{Version: 2, Commands: map[string]model.CommandConfig{}}

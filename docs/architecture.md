@@ -1,6 +1,6 @@
 # Manta Architecture
 
-Status: Complete through `HARDE-007`, `TAGS-001`, and `RELRV-004`
+Status: Complete through `HARDE-007`, `TAGS-001`, and `RELRV-005`
 Scope: Standalone Manta v0.1 architecture, including schema-v2 tag selectors and release-readiness follow-up
 
 This document defines Manta's technical and artifact contracts. See the [integration guide](integration-guide.md) for parent-project ownership, supported capability status, and rollout guidance.
@@ -254,6 +254,7 @@ Command execution status is authoritative. Parser quality only affects evidence 
 - A bounded-tail scan always reports `extractor_status: degraded`, even when it finds useful evidence, because earlier evidence may have been omitted.
 - Failure or warning record truncation always reports `extractor_status: degraded`; command status and exit code remain authoritative.
 - Rule fixture testing still rejects inputs larger than 256 KiB because an incomplete scan cannot prove that a rule did not miss or overmatch evidence.
+- Config YAML, project rule YAML, `rules create/update --file` YAML, and `rules propose --raw-log` inputs are read through a 256 KiB preflight bound. Oversized inputs fail with config exit code `2` before YAML decoding, command execution, or rule/proposal writes.
 - Parser or rule matches and misses never convert an authoritative non-pass result into pass.
 - Project rules run before the selected parser. When no rule matches, a specialized parser uses only its own patterns and never retries generic extraction.
 

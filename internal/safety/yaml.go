@@ -10,6 +10,9 @@ import (
 
 // DecodeYAMLStrict decodes exactly one YAML document and rejects unknown fields.
 func DecodeYAMLStrict(data []byte, target any) error {
+	if len(data) > MaxConfigRuleInputBytes {
+		return fmt.Errorf("YAML input exceeds %d bytes", MaxConfigRuleInputBytes)
+	}
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(target); err != nil {

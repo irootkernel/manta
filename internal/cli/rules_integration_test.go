@@ -7,43 +7,16 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/irootkernel/manta/internal/model"
+	"github.com/irootkernel/manta/internal/safety"
 )
 
 func TestRulesLifecycleCommands(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
 	inputPath := filepath.Join(repo, "generic-v1.yaml")
-	ruleText := strings.Join([]string{
-		"id: generic-v1",
-		"tags: [unit]",
-		"parser: generic",
-		"status: active",
-		"provenance:",
-		"  created_by: tester",
-		"  source_run: local-unit",
-		"  source_command: unit",
-		"  source_log_sha256: sha256:abc",
-		"  source_span:",
-		"    start_line: 2",
-		"    end_line: 4",
-		"  reason: fixture-backed rule",
-		"match:",
-		"  start:",
-		"    regex: '^TypeError:'",
-		"  end:",
-		"    any_of:",
-		"      - regex: '^$'",
-		"    max_block_lines: 20",
-		"  include_context:",
-		"    before: 0",
-		"    after: 0",
-		"extract:",
-		"  file_line:",
-		"    regex: '(?P<file>[^\\s:]+\\.ts):(?P<line>\\d+)'",
-		"  test_name:",
-		"    regex: '^\\s*[✗×]\\s+(?P<test>.+)$'",
-		"confidence: medium",
-	}, "\n") + "\n"
+	ruleText := ruleInputYAML("generic-v1", "fixture-backed rule")
 	if err := os.WriteFile(inputPath, []byte(ruleText), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -122,4 +95,93 @@ func TestRulesLifecycleCommands(t *testing.T) {
 	if exitCode != 0 || !strings.Contains(stdout.String(), "disabled") {
 		t.Fatalf("expected delete to disable rule, exit=%d stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
 	}
+}
+
+func TestRuleSourceFilesEnforceInputSizeLimit(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	exactPath := filepath.Join(repo, "exact.yaml")
+	if err := os.WriteFile(exactPath, paddedRuleInput("bounded-v1", safety.MaxConfigRuleInputBytes), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if exitCode := Main([]string{"--repo", repo, "rules", "create", "--file", exactPath}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("exact-limit create failed: exit=%d stderr=%q", exitCode, stderr.String())
+	}
+	storedPath := filepath.Join(repo, ".manta", "tester", "rules", "bounded-v1.yaml")
+	before, err := os.ReadFile(storedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	oversizedUpdate := filepath.Join(repo, "oversized-update.yaml")
+	if err := os.WriteFile(oversizedUpdate, paddedRuleInput("bounded-v1", safety.MaxConfigRuleInputBytes+1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	exitCode := Main([]string{"--repo", repo, "rules", "update", "bounded-v1", "--file", oversizedUpdate}, &stdout, &stderr)
+	if exitCode != int(model.ExitCodeConfigError) || !strings.Contains(stderr.String(), "input exceeds 262144 bytes") {
+		t.Fatalf("oversized update exit=%d stderr=%q", exitCode, stderr.String())
+	}
+	after, err := os.ReadFile(storedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("oversized update changed the stored rule")
+	}
+
+	oversizedCreate := filepath.Join(repo, "oversized-create.yaml")
+	if err := os.WriteFile(oversizedCreate, paddedRuleInput("oversized-v1", safety.MaxConfigRuleInputBytes+1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	exitCode = Main([]string{"--repo", repo, "rules", "create", "--file", oversizedCreate}, &stdout, &stderr)
+	if exitCode != int(model.ExitCodeConfigError) || !strings.Contains(stderr.String(), "input exceeds 262144 bytes") {
+		t.Fatalf("oversized create exit=%d stderr=%q", exitCode, stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".manta", "tester", "rules", "oversized-v1.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("oversized create wrote a rule: %v", err)
+	}
+}
+
+func paddedRuleInput(id string, size int) []byte {
+	base := ruleInputYAML(id, "bounded input fixture") + "#"
+	return append([]byte(base), bytes.Repeat([]byte("x"), size-len(base))...)
+}
+
+func ruleInputYAML(id, reason string) string {
+	return strings.Join([]string{
+		"id: " + id,
+		"tags: [unit]",
+		"parser: generic",
+		"status: active",
+		"provenance:",
+		"  created_by: tester",
+		"  source_run: local-unit",
+		"  source_command: unit",
+		"  source_log_sha256: sha256:abc",
+		"  source_span:",
+		"    start_line: 2",
+		"    end_line: 4",
+		"  reason: " + reason,
+		"match:",
+		"  start:",
+		"    regex: '^TypeError:'",
+		"  end:",
+		"    any_of:",
+		"      - regex: '^$'",
+		"    max_block_lines: 20",
+		"  include_context:",
+		"    before: 0",
+		"    after: 0",
+		"extract:",
+		"  file_line:",
+		"    regex: '(?P<file>[^\\s:]+\\.ts):(?P<line>\\d+)'",
+		"  test_name:",
+		"    regex: '^\\s*[✗×]\\s+(?P<test>.+)$'",
+		"confidence: medium",
+	}, "\n") + "\n"
 }

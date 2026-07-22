@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/irootkernel/manta/internal/model"
+	"github.com/irootkernel/manta/internal/safety"
 )
 
 func TestBinaryRejectsUnknownConfigFields(t *testing.T) {
@@ -34,6 +36,84 @@ func TestBinaryRejectsUnknownConfigFields(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(repo, "command-ran")); !os.IsNotExist(err) {
 		t.Fatalf("command ran after invalid config: %v", err)
 	}
+}
+
+func TestBinaryEnforcesRuleAndConfigInputSizeLimits(t *testing.T) {
+	t.Parallel()
+	root := projectRoot(t)
+	bin := buildBinary(t, root)
+
+	t.Run("config fails before command execution", func(t *testing.T) {
+		repo := t.TempDir()
+		writeE2EConfig(t, repo, "#!/bin/sh\ntouch command-ran\n")
+		configPath := filepath.Join(repo, ".manta", "tester.yaml")
+		config, err := os.ReadFile(configPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(configPath, padYAMLToSize(config, safety.MaxConfigRuleInputBytes+1), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		requireRunConfigErrorBeforeExecution(t, bin, repo)
+	})
+
+	t.Run("stored rule fails before command execution", func(t *testing.T) {
+		repo := t.TempDir()
+		writeE2EConfig(t, repo, "#!/bin/sh\ntouch command-ran\n")
+		rulesDir := filepath.Join(repo, ".manta", "tester", "rules")
+		if err := os.MkdirAll(rulesDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		rule := padYAMLToSize([]byte(auditRuleYAML("oversized-v1", 20, 0, 0)), safety.MaxConfigRuleInputBytes+1)
+		if err := os.WriteFile(filepath.Join(rulesDir, "oversized-v1.yaml"), rule, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		requireRunConfigErrorBeforeExecution(t, bin, repo)
+	})
+
+	t.Run("rule source does not create rule", func(t *testing.T) {
+		repo := t.TempDir()
+		inputPath := filepath.Join(repo, "oversized.yaml")
+		rule := padYAMLToSize([]byte(auditRuleYAML("oversized-v1", 20, 0, 0)), safety.MaxConfigRuleInputBytes+1)
+		if err := os.WriteFile(inputPath, rule, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		out, err := exec.Command(bin, "--repo", repo, "rules", "create", "--file", inputPath).CombinedOutput()
+		requireExitCode(t, err, int(model.ExitCodeConfigError), out)
+		if _, err := os.Stat(filepath.Join(repo, ".manta", "tester", "rules", "oversized-v1.yaml")); !os.IsNotExist(err) {
+			t.Fatalf("oversized source created rule: %v", err)
+		}
+	})
+
+	t.Run("propose raw log does not create proposal", func(t *testing.T) {
+		repo := t.TempDir()
+		rawPath := filepath.Join(repo, "oversized.raw.log")
+		if err := os.WriteFile(rawPath, bytes.Repeat([]byte("x"), safety.MaxConfigRuleInputBytes+1), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		out, err := exec.Command(bin, "--repo", repo, "rules", "propose", "--tag", "unit", "--parser", "generic", "--raw-log", rawPath, "--span", "1:1").CombinedOutput()
+		requireExitCode(t, err, int(model.ExitCodeConfigError), out)
+		if _, err := os.Stat(filepath.Join(repo, ".manta", "rule-proposals")); !os.IsNotExist(err) {
+			t.Fatalf("oversized raw log created proposal directory: %v", err)
+		}
+	})
+
+	t.Run("rule test keeps parser-error contract", func(t *testing.T) {
+		repo := t.TempDir()
+		rulesDir := filepath.Join(repo, ".manta", "tester", "rules")
+		if err := os.MkdirAll(rulesDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(rulesDir, "bounded-v1.yaml"), []byte(auditRuleYAML("bounded-v1", 20, 0, 0)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		rawPath := filepath.Join(repo, "oversized.raw.log")
+		if err := os.WriteFile(rawPath, bytes.Repeat([]byte("x"), safety.MaxRegexInputBytes+1), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		out, err := exec.Command(bin, "--repo", repo, "rules", "test", "--rule", "bounded-v1", "--log", rawPath, "--expect-span", "1:1").CombinedOutput()
+		requireExitCode(t, err, int(model.ExitCodeParserError), out)
+	})
 }
 
 func TestRequirementTraceabilityMatrixCoversCompletedRequirements(t *testing.T) {
@@ -259,4 +339,18 @@ match:
 extract: {}
 confidence: medium
 `, id, maxBlockLines, before, after)
+}
+
+func padYAMLToSize(data []byte, size int) []byte {
+	padded := append(append([]byte(nil), data...), '#')
+	return append(padded, bytes.Repeat([]byte("x"), size-len(padded))...)
+}
+
+func requireRunConfigErrorBeforeExecution(t *testing.T, bin, repo string) {
+	t.Helper()
+	out, err := exec.Command(bin, "--repo", repo, "run", "unit").CombinedOutput()
+	requireExitCode(t, err, int(model.ExitCodeConfigError), out)
+	if _, err := os.Stat(filepath.Join(repo, "command-ran")); !os.IsNotExist(err) {
+		t.Fatalf("command ran after config error: %v", err)
+	}
 }

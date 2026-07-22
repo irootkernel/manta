@@ -1,6 +1,6 @@
 # Manta Implementation Note
 
-Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, `TAGS-001`, and `RELRV-001` through `RELRV-004` complete
+Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, `TAGS-001`, and `RELRV-001` through `RELRV-005` complete
 Scope: Maintainer guidance for the standalone Manta v0.1 implementation, schema-v2 tags, release-readiness follow-up, and future changes
 
 This document explains implementation constraints and verification expectations for contributors. It is not the parent-project adoption contract; integrators should start with the [integration guide](integration-guide.md).
@@ -145,13 +145,14 @@ extract:
 confidence: medium
 ```
 
-Validation rejects unknown YAML fields, extra YAML documents, missing IDs or provenance, duplicate IDs, negative or oversized context, a combined matched-block/context budget above 160 lines, excessive `max_block_lines`, invalid capture groups, invalid or unsupported regex, inconsistent active/disabled deletion reasons, and rule overmatch during rule-only `rules test` extraction.
+Validation rejects unknown YAML fields, extra YAML documents, missing IDs or provenance, duplicate IDs, negative or oversized context, a combined matched-block/context budget above 160 lines, excessive `max_block_lines`, invalid capture groups, invalid or unsupported regex, inconsistent active/disabled deletion reasons, and rule overmatch during rule-only `rules test` extraction. Config, stored rule, and imported rule YAML are limited to 256 KiB before decoding.
 
 ## Regex safety guidance
 
 - Use Go `regexp` with RE2 semantics only.
 - Do not support PCRE-only features or backtracking-dependent behavior.
 - Bound regex input size before matching; use the bounded complete-line tail for runtime and summarize extraction, and reject oversized rule-test fixtures.
+- Read config/rule YAML and `rules propose` raw logs through a 256 KiB file bound before decoding, splitting, hashing, or writing derived rule files.
 - Bound extracted block lines, excerpt bytes, and summary bytes independently of regex success.
 - Fail closed on invalid or unsupported regex.
 
@@ -183,6 +184,7 @@ Tests should cover:
 - Rule test with expected span.
 - Rule overmatch rejection.
 - Extreme rule context values failing closed before command execution, plus defensive extraction bounds that prevent overflow or panic for unvalidated in-memory rules.
+- Exact-limit and oversized config, stored rule, imported rule, and `rules propose` raw-log inputs, including config exit `2` and absence of command or output side effects.
 - Artifact path generation for `.manta/`, caller-selected `--output-dir`, and `.manta/runs/scoped/<run_id>/...` layouts, plus built-binary rejection of external `.manta/runs/standalone` and `.manta/runs/scoped` symlinks before command execution.
 - Sequential, goroutine-concurrent, and cross-process standalone directory allocation within one UTC-second interval, including configured, ad-hoc, and summarize evidence preservation.
 - Invalid run, command, rule, and failure IDs failing before command execution or artifact writes.

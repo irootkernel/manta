@@ -147,9 +147,13 @@ func TestRule(repoRoot, id, rawLogPath string, expectStart, expectEnd int) (mode
 	if !filepath.IsAbs(resolved) {
 		resolved = filepath.Join(repoRoot, rawLogPath)
 	}
-	raw, err := os.ReadFile(resolved)
+	raw, err := safety.ReadFileLimited(resolved)
 	if err != nil {
-		return model.RuleTestResult{}, model.NewMantaError(model.ExitCodeConfigError, "read raw log", err)
+		code := model.ExitCodeConfigError
+		if safety.IsInputTooLarge(err) {
+			code = model.ExitCodeParserError
+		}
+		return model.RuleTestResult{}, model.NewMantaError(code, "read raw log", err)
 	}
 	run := model.RunOutput{Status: model.RunStatusFailed}
 	processed, err := extract.ProcessRules(raw, run, []model.Rule{rule})
@@ -196,7 +200,7 @@ func proposeAt(repoRoot string, tags []string, parser, rawLogPath string, startL
 	if !filepath.IsAbs(resolved) {
 		resolved = filepath.Join(repoRoot, rawLogPath)
 	}
-	raw, err := os.ReadFile(resolved)
+	raw, err := safety.ReadFileLimited(resolved)
 	if err != nil {
 		return model.RuleProposal{}, model.NewMantaError(model.ExitCodeConfigError, "read raw log", err)
 	}
@@ -308,7 +312,7 @@ func ValidateStoredRule(rule model.Rule) error {
 }
 
 func readRuleFile(repoRoot, path string) (model.Rule, error) {
-	data, err := safety.ReadFileWithin(repoRoot, path)
+	data, err := safety.ReadFileWithinLimit(repoRoot, path)
 	if err != nil {
 		return model.Rule{}, model.NewMantaError(model.ExitCodeConfigError, "read rule file", err)
 	}
