@@ -6,14 +6,20 @@ import (
 	"strings"
 
 	"github.com/irootkernel/manta/internal/model"
+	"github.com/irootkernel/manta/internal/safety"
 )
 
 var (
-	vitestFailRE     = regexp.MustCompile(`^\s*FAIL\s+(.+?)(?:\s+>\s+(.+))?$`)
-	vitestCaseRE     = regexp.MustCompile(`^\s*[×✗]\s+(.+?)(?:\s+\d+ms)?$`)
-	pytestSummaryRE  = regexp.MustCompile(`^FAILED\s+([^\s:]+(?:/[^\s:]+)*)::([^\s]+)\s+-\s+(.+)$`)
-	goTestFailRE     = regexp.MustCompile(`^--- FAIL: ([^(\s]+)`)
-	playwrightFailRE = regexp.MustCompile(`^\s*\d+\)\s+\[[^\]]+\]\s+›\s+(.+?):(\d+):\d+\s+›\s+(.+?)(?:\s+─*)?$`)
+	vitestFailRE           = regexp.MustCompile(`^\s*FAIL\s+(.+?)(?:\s+>\s+(.+))?$`)
+	vitestCaseRE           = regexp.MustCompile(`^\s*[×✗]\s+(.+?)(?:\s+\d+ms)?$`)
+	pytestFailureSectionRE = regexp.MustCompile(`^=+\s+FAILURES\s+=+$`)
+	pytestSectionRE        = regexp.MustCompile(`^=+\s+.+?\s+=+$`)
+	pytestFailureHeaderRE  = regexp.MustCompile(`^_{2,}\s+(.+?)\s+_{2,}$`)
+	pytestCapturedRE       = regexp.MustCompile(`^-+\s+Captured .+\s+-+$`)
+	pytestLocationRE       = regexp.MustCompile(`^([^\s:]+\.py):(\d+):\s+(.+)$`)
+	pytestSummaryRE        = regexp.MustCompile(`^FAILED\s+([^\s:]+(?:/[^\s:]+)*)::([^\s]+)\s+-\s+(.+)$`)
+	goTestFailRE           = regexp.MustCompile(`^--- FAIL: ([^(\s]+)`)
+	playwrightFailRE       = regexp.MustCompile(`^\s*\d+\)\s+\[[^\]]+\]\s+›\s+(.+?):(\d+):\d+\s+›\s+(.+?)(?:\s+─*)?$`)
 )
 
 func parserFailures(parser string, lines []lineIndex, text string) []model.Failure {
@@ -56,6 +62,10 @@ func vitestFailures(lines []lineIndex, text string) []model.Failure {
 }
 
 func pytestFailures(lines []lineIndex, text string) []model.Failure {
+	if failures := pytestDetailedFailures(lines, text); len(failures) > 0 {
+		return failures
+	}
+
 	failures := make([]model.Failure, 0)
 	for idx, line := range lines {
 		match := pytestSummaryRE.FindStringSubmatch(line.text)
@@ -66,6 +76,59 @@ func pytestFailures(lines []lineIndex, text string) []model.Failure {
 		failure := model.Failure{Signature: strings.TrimSpace(match[3]), RawSpan: span}
 		failure.File = strings.TrimSpace(match[1])
 		failure.TestName = strings.TrimSpace(match[2])
+		failures = append(failures, failure)
+	}
+	return failures
+}
+
+func pytestDetailedFailures(lines []lineIndex, text string) []model.Failure {
+	failures := make([]model.Failure, 0)
+	inFailuresSection := false
+	for idx, line := range lines {
+		if pytestFailureSectionRE.MatchString(line.text) {
+			inFailuresSection = true
+			continue
+		}
+		if !inFailuresSection {
+			continue
+		}
+		if pytestSectionRE.MatchString(line.text) {
+			break
+		}
+
+		headerMatch := pytestFailureHeaderRE.FindStringSubmatch(line.text)
+		if len(headerMatch) == 0 {
+			continue
+		}
+
+		maxLine := min(len(lines)-1, idx+safety.MaxBlockLines-1)
+		locationLine := -1
+		var locationMatch []string
+		for scanIdx := idx + 1; scanIdx <= maxLine; scanIdx++ {
+			if pytestSectionRE.MatchString(lines[scanIdx].text) || pytestFailureHeaderRE.MatchString(lines[scanIdx].text) || pytestCapturedRE.MatchString(lines[scanIdx].text) {
+				break
+			}
+			if match := pytestLocationRE.FindStringSubmatch(lines[scanIdx].text); len(match) > 0 {
+				locationLine = scanIdx
+				locationMatch = match
+			}
+		}
+		if locationLine < 0 {
+			continue
+		}
+
+		span := spanFor(lines, idx, locationLine)
+		segment := sliceText(text, span)
+		failure := model.Failure{
+			Signature: firstMeaningfulLine(segment, locationMatch[3]),
+			File:      locationMatch[1],
+			TestName:  headerMatch[1],
+			RawSpan:   span,
+			StackTop:  stackTop(segment),
+		}
+		if lineNo, err := strconv.Atoi(locationMatch[2]); err == nil {
+			failure.Line = lineNo
+		}
 		failures = append(failures, failure)
 	}
 	return failures

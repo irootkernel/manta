@@ -1,6 +1,6 @@
 # Manta Architecture
 
-Status: Complete through `HARDE-007`, `TAGS-001`, and `RELRV-003`
+Status: Complete through `HARDE-007`, `TAGS-001`, and `RELRV-004`
 Scope: Standalone Manta v0.1 architecture, including schema-v2 tag selectors and release-readiness follow-up
 
 This document defines Manta's technical and artifact contracts. See the [integration guide](integration-guide.md) for parent-project ownership, supported capability status, and rollout guidance.

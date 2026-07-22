@@ -952,6 +952,23 @@ exit 1
 			line:     73,
 			testName: "submits order",
 		},
+		{
+			parser: "pytest",
+			script: `#!/bin/sh
+echo '=================================== FAILURES ==================================='
+echo '_______________________________ test_empty_state _______________________________'
+echo ''
+echo 'E       AssertionError: expected ready'
+echo ''
+echo 'tests/test_app.py:42: AssertionError'
+echo '=========================== short test summary info ============================'
+echo 'FAILED tests/test_app.py::test_empty_state - AssertionError: expected ready'
+exit 1
+`,
+			file:     "tests/test_app.py",
+			line:     42,
+			testName: "test_empty_state",
+		},
 	} {
 		t.Run(test.parser, func(t *testing.T) {
 			repo := t.TempDir()

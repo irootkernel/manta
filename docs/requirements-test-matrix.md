@@ -33,9 +33,9 @@ This matrix records the primary evidence for every requirement marked complete. 
 | `MANTA-REQ-RQART-006` | `TestConfiguredRunAndExcerpt`; `TestExcerptSymlinkContainment` |
 | `MANTA-REQ-RQART-007` | `TestArtifactOutputDirectories`; `TestRunIDArtifactLayout` |
 | `MANTA-REQ-RQEXT-001` | `TestProcessGenericFailureProducesPreciseSpan` |
-| `MANTA-REQ-RQEXT-002` | `TestValidateAcceptsImplementedParsers`; `TestProcessVitestFixture`; `TestProcessPytestFixture`; `TestProcessGoTestFixture`; `TestProcessPlaywrightFixture`; `TestConfiguredRunsUseSpecializedParsers` |
+| `MANTA-REQ-RQEXT-002` | `TestValidateAcceptsImplementedParsers`; `TestProcessVitestFixture`; `TestProcessPytestFixture`; `TestProcessGoTestFixture`; `TestProcessPlaywrightFixture`; `TestConfiguredRunsUseSpecializedParsers`; `TestBinaryExtractionContracts` |
 | `MANTA-REQ-RQEXT-003` | `TestProcessGenericFailureProducesPreciseSpan`; `TestProcessRulesBoundsUnvalidatedContext` |
-| `MANTA-REQ-RQEXT-004` | `TestProcessGenericFailureProducesPreciseSpan`; `TestProcessVitestFixture`; `TestProcessPytestFixture`; `TestProcessGoTestFixture`; `TestProcessPlaywrightFixture`; `TestConfiguredRunsUseSpecializedParsers` |
+| `MANTA-REQ-RQEXT-004` | `TestProcessGenericFailureProducesPreciseSpan`; `TestProcessVitestFixture`; `TestProcessPytestFixture`; `TestProcessGoTestFixture`; `TestProcessPlaywrightFixture`; `TestConfiguredRunsUseSpecializedParsers`; `TestBinaryExtractionContracts` |
 | `MANTA-REQ-RQEXT-005` | `TestProcessExtractorStatusContract`; `TestNoisyRunsWriteBoundedTerminalArtifacts` |
 | `MANTA-REQ-RQEXT-006` | `TestProcessExtractorStatusContract`; `TestBinaryExtractionContracts` |
 | `MANTA-REQ-RQEXT-007` | `TestMaterializeArtifactsExtractionErrorContract`; `TestBinaryExtractionContracts` |
@@ -50,7 +50,7 @@ This matrix records the primary evidence for every requirement marked complete. 
 | `MANTA-REQ-RQSEC-001` | `TestRedactSummaryCoversSurfacedMetadata`; `TestBinaryJSONRedactsCommandMetadata` |
 | `MANTA-REQ-RQSEC-002` | `TestConfiguredRunRedactsSurfacedMetadata`; `TestBinaryJSONRedactsCommandMetadata` |
 | `MANTA-REQ-RQSEC-003` | `TestBinaryRejectsUnknownConfigFields`; `TestBinaryRejectsOversizedRuleContext` |
-| `MANTA-REQ-RQSEC-004` | `TestWriteSummaryJSONFailsWhenTooLarge`; `TestProcessOversizedLogUsesBoundedTail`; `TestProcessRulesRejectsOversizedInput`; `TestBoundSummaryEvidenceCapsRecordsAndKeepsCountsAligned`; `TestBoundSummaryEvidenceUsesRenderedByteBudget`; `TestBoundSummaryEvidenceUsesRemainingBudgetForWarnings`; `TestNoisyRunsWriteBoundedTerminalArtifacts` |
+| `MANTA-REQ-RQSEC-004` | `TestWriteSummaryJSONFailsWhenTooLarge`; `TestProcessOversizedLogUsesBoundedTail`; `TestProcessPytestDetailScanIsBounded`; `TestProcessRulesRejectsOversizedInput`; `TestBoundSummaryEvidenceCapsRecordsAndKeepsCountsAligned`; `TestBoundSummaryEvidenceUsesRenderedByteBudget`; `TestBoundSummaryEvidenceUsesRemainingBudgetForWarnings`; `TestNoisyRunsWriteBoundedTerminalArtifacts` |
 | `MANTA-REQ-RQSEC-005` | `TestProcessExtractorStatusContract`; `TestBinaryExtractionContracts` |
 | `MANTA-REQ-RQWAT-001` | `TestConfiguredRunAndExcerpt`; status-hash assertions in CLI and binary tests; `TestNoisyRunsWriteBoundedTerminalArtifacts` |
 | `MANTA-REQ-RQWAT-002` | `ComputeStatusHash`; status-hash assertions in CLI and binary tests |

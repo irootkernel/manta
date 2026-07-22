@@ -273,6 +273,43 @@ func TestBinaryExtractionContracts(t *testing.T) {
 	root := projectRoot(t)
 	bin := buildBinary(t, root)
 
+	t.Run("pytest detail block writes precise artifacts", func(t *testing.T) {
+		repo := t.TempDir()
+		writeE2EConfigWithParser(t, repo, "pytest", `#!/bin/sh
+echo '=================================== FAILURES ==================================='
+echo '_______________________________ test_empty_state _______________________________'
+echo ''
+echo 'E       AssertionError: expected ready'
+echo ''
+echo 'tests/test_app.py:42: AssertionError'
+echo '=========================== short test summary info ============================'
+echo 'FAILED tests/test_app.py::test_empty_state - AssertionError: expected ready'
+exit 1
+`)
+
+		result, stderr := runBinaryJSONWithExit(t, bin, repo, 1, "run", "unit")
+		if stderr != "" {
+			t.Fatalf("expected no pytest extraction diagnostic, got %q", stderr)
+		}
+		summary, status, _ := loadBinaryRunArtifacts(t, repo, result)
+		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusFailed, 1, model.ExtractorStatusPrecise, 1)
+		if summary.Parser != "pytest" {
+			t.Fatalf("unexpected pytest binary summary: %+v", summary)
+		}
+		failure := summary.Failures[0]
+		if failure.File != "tests/test_app.py" || failure.Line != 42 || failure.TestName != "test_empty_state" {
+			t.Fatalf("unexpected pytest binary failure: %+v", failure)
+		}
+		excerptPath := filepath.Join(repo, filepath.Dir(filepath.FromSlash(status.SummaryPath)), filepath.FromSlash(failure.Excerpt))
+		excerpt, err := os.ReadFile(excerptPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Contains(excerpt, []byte("tests/test_app.py:42: AssertionError")) {
+			t.Fatalf("expected pytest detail location in excerpt, got %q", excerpt)
+		}
+	})
+
 	t.Run("specialized parser miss does not use generic fallback", func(t *testing.T) {
 		repo := t.TempDir()
 		writeE2EConfigWithParser(t, repo, "vitest", "#!/bin/sh\necho 'TypeError: generic-looking failure'\necho 'src/foo.test.ts:42:13'\nexit 7\n")
@@ -282,7 +319,7 @@ func TestBinaryExtractionContracts(t *testing.T) {
 			t.Fatalf("expected no diagnostic for a parser miss, got %q", stderr)
 		}
 		summary, status, _ := loadBinaryRunArtifacts(t, repo, result)
-		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusFailed, 7, 0)
+		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusFailed, 7, model.ExtractorStatusDegraded, 0)
 	})
 
 	t.Run("oversized passing command uses bounded extraction", func(t *testing.T) {
@@ -301,7 +338,7 @@ func TestBinaryExtractionContracts(t *testing.T) {
 		if !bytes.Equal(copiedRaw, raw) {
 			t.Fatal("oversized passing command did not preserve raw evidence")
 		}
-		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusPassed, 0, 0)
+		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusPassed, 0, model.ExtractorStatusDegraded, 0)
 		assertBinaryMarkdownContract(t, repo, result, "passed", "0", "degraded")
 	})
 
@@ -322,7 +359,7 @@ func TestBinaryExtractionContracts(t *testing.T) {
 		if !bytes.Equal(copiedRaw, raw) {
 			t.Fatal("oversized failing command did not preserve raw evidence")
 		}
-		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusFailed, 7, 1)
+		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusFailed, 7, model.ExtractorStatusDegraded, 1)
 		failure := summary.Failures[0]
 		if want := bytes.Count(raw[:failure.RawSpan.StartByte], []byte{'\n'}) + 1; failure.RawSpan.StartLine != want {
 			t.Fatalf("failure start line = %d, want absolute line %d", failure.RawSpan.StartLine, want)
@@ -371,7 +408,7 @@ func TestBinaryExtractionContracts(t *testing.T) {
 			t.Fatalf("expected no extraction diagnostic, got %q", stderr)
 		}
 		summary, status, raw := loadBinaryRunArtifacts(t, repo, result)
-		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusFailed, 7, safety.MaxSummaryFailures)
+		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusFailed, 7, model.ExtractorStatusDegraded, safety.MaxSummaryFailures)
 		if !summary.FailuresTruncated || summary.WarningsTruncated || len(summary.Failures) != safety.MaxSummaryFailures || summary.Failures[len(summary.Failures)-1].ID != "F050" {
 			t.Fatalf("unexpected noisy failure summary: %+v", summary)
 		}
@@ -494,7 +531,7 @@ func TestBinaryExtractionContracts(t *testing.T) {
 		if !bytes.Equal(copiedRaw, raw) {
 			t.Fatal("oversized summarize did not preserve copied raw evidence")
 		}
-		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusPassed, 0, 0)
+		assertBinaryExtractionContract(t, result, summary, status, model.RunStatusPassed, 0, model.ExtractorStatusDegraded, 0)
 		assertBinaryMarkdownContract(t, repo, result, "passed", "0", "degraded")
 	})
 }
@@ -1022,15 +1059,15 @@ func loadBinaryRunArtifacts(t *testing.T, repo string, result binaryRunResult) (
 	return summary, status, raw
 }
 
-func assertBinaryExtractionContract(t *testing.T, result binaryRunResult, summary model.Summary, status model.Status, wantStatus model.RunStatus, wantExitCode, wantFailures int) {
+func assertBinaryExtractionContract(t *testing.T, result binaryRunResult, summary model.Summary, status model.Status, wantStatus model.RunStatus, wantExitCode int, wantExtractor model.ExtractorStatus, wantFailures int) {
 	t.Helper()
-	if result.Status != wantStatus || result.ExitCode != wantExitCode || result.Extractor != string(model.ExtractorStatusDegraded) || result.Failures != wantFailures {
+	if result.Status != wantStatus || result.ExitCode != wantExitCode || result.Extractor != string(wantExtractor) || result.Failures != wantFailures {
 		t.Fatalf("unexpected binary result: %+v", result)
 	}
-	if summary.Status != wantStatus || summary.ExitCode != wantExitCode || summary.ExtractorStatus != model.ExtractorStatusDegraded || summary.FailureCount != wantFailures || summary.WarningCount != 0 {
+	if summary.Status != wantStatus || summary.ExitCode != wantExitCode || summary.ExtractorStatus != wantExtractor || summary.FailureCount != wantFailures || summary.WarningCount != 0 {
 		t.Fatalf("unexpected binary summary: %+v", summary)
 	}
-	if status.Status != wantStatus || status.ExitCode != wantExitCode || status.ExtractorStatus != model.ExtractorStatusDegraded {
+	if status.Status != wantStatus || status.ExitCode != wantExitCode || status.ExtractorStatus != wantExtractor {
 		t.Fatalf("unexpected binary status: %+v", status)
 	}
 }

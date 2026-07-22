@@ -1,4 +1,17 @@
 ============================= test session starts ==============================
-FAILED tests/test_app.py::test_empty_state - AssertionError: expected ready
+collected 1 item
+
+tests/test_app.py F                                                     [100%]
+
+=================================== FAILURES ===================================
+_______________________________ test_empty_state _______________________________
+
+    def test_empty_state():
+>       assert state == "ready"
+E       AssertionError: expected ready
+E       assert 'loading' == 'ready'
+
+tests/test_app.py:42: AssertionError
 =========================== short test summary info ============================
 FAILED tests/test_app.py::test_empty_state - AssertionError: expected ready
+============================== 1 failed in 0.01s ===============================

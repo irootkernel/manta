@@ -1,6 +1,6 @@
 # Manta Todo
 
-Status: 6 open items from the v0.1.4 release-readiness review
+Status: 5 open items from the v0.1.4 release-readiness review
 Scope: Documentation and implementation follow-up notes
 
 ## Todo status legend
@@ -16,13 +16,6 @@ Tag and publish `v0.1.4` only after the items below are closed and the release-r
 ## Open items
 
 Items are listed in recommended fix order. Line references were verified against the current tree and may drift as fixes land.
-
-### RELRV-004 `Open` — Pytest parser cannot capture line numbers; fixture is unrealistic
-
-- Severity: medium.
-- Problem: pytest extraction only parses short-summary `FAILED path::test - reason` lines, which carry no line number, so `Failure.Line` is never populated; `internal/extract/testdata/pytest.raw.log` repeats the same short-summary line instead of modeling the `FAILURES` detail block (`path.py:LINE: ExceptionType`) that real pytest emits.
-- Evidence: `internal/extract/parsers.go:14,58-72`; `internal/extract/testdata/pytest.raw.log`.
-- Done when: the fixture reflects genuine pytest output including the detail block, the parser captures file and line (and test name) from it, and extraction tests assert `Line` population.
 
 ### RELRV-005 `Open` — Bound rule/config input sizes (YAML amplification, propose raw-log read)
 

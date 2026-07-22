@@ -341,19 +341,126 @@ func TestProcessVitestFixture(t *testing.T) {
 
 func TestProcessPytestFixture(t *testing.T) {
 	t.Parallel()
-	raw := readFixture(t, "pytest.raw.log")
+	processed := processPytest(t, readFixture(t, "pytest.raw.log"))
+	if len(processed.Failures) != 1 {
+		t.Fatalf("expected one pytest failure from the detail block, got %d", len(processed.Failures))
+	}
+	failure := processed.Failures[0]
+	if failure.File != "tests/test_app.py" || failure.Line != 42 || failure.TestName != "test_empty_state" {
+		t.Fatalf("expected pytest file/line/test capture, got %+v", failure)
+	}
+	if failure.RawSpan.StartLine != 7 || failure.RawSpan.EndLine != 14 {
+		t.Fatalf("expected pytest detail-block span at lines 7:14, got %+v", failure.RawSpan)
+	}
+}
+
+func TestProcessPytestSummaryOnly(t *testing.T) {
+	t.Parallel()
+	raw := []byte("FAILED tests/test_app.py::test_empty_state - AssertionError: expected ready\n")
+	processed := processPytest(t, raw)
+	if len(processed.Failures) != 1 {
+		t.Fatalf("expected one summary-only pytest failure, got %d", len(processed.Failures))
+	}
+	failure := processed.Failures[0]
+	if failure.File != "tests/test_app.py" || failure.Line != 0 || failure.TestName != "test_empty_state" {
+		t.Fatalf("expected summary-only pytest file/test capture, got %+v", failure)
+	}
+	if processed.ExtractorStatus != model.ExtractorStatusPrecise {
+		t.Fatalf("expected precise summary-only extraction, got %s", processed.ExtractorStatus)
+	}
+}
+
+func TestProcessPytestMultipleDetailBlocks(t *testing.T) {
+	t.Parallel()
+	raw := []byte(`=================================== FAILURES ===================================
+_______________________________ test_empty_state _______________________________
+
+E       AssertionError: expected ready
+
+tests/test_app.py:42: AssertionError
+_______________________________ test_checkout _________________________________
+
+E       AssertionError: expected paid
+
+tests/test_checkout.py:73: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_app.py::test_empty_state - AssertionError: expected ready
+FAILED tests/test_checkout.py::test_checkout - AssertionError: expected paid
+`)
+	processed := processPytest(t, raw)
+	want := []struct {
+		file     string
+		line     int
+		testName string
+	}{
+		{file: "tests/test_app.py", line: 42, testName: "test_empty_state"},
+		{file: "tests/test_checkout.py", line: 73, testName: "test_checkout"},
+	}
+	if len(processed.Failures) != len(want) {
+		t.Fatalf("expected %d detail-block failures without summary duplicates, got %d", len(want), len(processed.Failures))
+	}
+	for idx, expected := range want {
+		failure := processed.Failures[idx]
+		if failure.File != expected.file || failure.Line != expected.line || failure.TestName != expected.testName {
+			t.Fatalf("pytest failure %d = %+v, want file %q, line %d, test name %q", idx, failure, expected.file, expected.line, expected.testName)
+		}
+	}
+}
+
+func TestProcessPytestDetailScanIsBounded(t *testing.T) {
+	t.Parallel()
+	raw := []byte(strings.Join([]string{
+		"=================================== FAILURES ===================================",
+		"_______________________________ test_empty_state _______________________________",
+		strings.Repeat("noise\n", safety.MaxBlockLines),
+		"tests/test_app.py:42: AssertionError",
+		"=========================== short test summary info ============================",
+		"FAILED tests/test_app.py::test_empty_state - AssertionError: expected ready",
+	}, "\n"))
+	processed := processPytest(t, raw)
+	if len(processed.Failures) != 1 {
+		t.Fatalf("expected one summary fallback after bounded detail scan, got %d", len(processed.Failures))
+	}
+	failure := processed.Failures[0]
+	if failure.Line != 0 || failure.Signature != "AssertionError: expected ready" {
+		t.Fatalf("detail scan crossed its line bound instead of using the summary fallback: %+v", failure)
+	}
+}
+
+func TestProcessPytestStopsBeforeCapturedOutput(t *testing.T) {
+	t.Parallel()
+	raw := []byte(`=================================== FAILURES ===================================
+_______________________________ test_empty_state _______________________________
+
+E       AssertionError: expected ready
+
+tests/test_app.py:42: AssertionError
+----------------------------- Captured stdout call -----------------------------
+fake.py:999: unrelated output
+=========================== short test summary info ============================
+FAILED tests/test_app.py::test_empty_state - AssertionError: expected ready
+`)
+	processed := processPytest(t, raw)
+	if len(processed.Failures) != 1 {
+		t.Fatalf("expected one pytest failure, got %d", len(processed.Failures))
+	}
+	failure := processed.Failures[0]
+	if failure.File != "tests/test_app.py" || failure.Line != 42 {
+		t.Fatalf("captured output replaced the pytest failure location: %+v", failure)
+	}
+	if len(failure.StackTop) != 1 || failure.StackTop[0] != "tests/test_app.py:42" {
+		t.Fatalf("captured output polluted pytest stack top: %+v", failure.StackTop)
+	}
+}
+
+func processPytest(t *testing.T, raw []byte) model.RunOutput {
+	t.Helper()
 	run := model.RunOutput{Status: model.RunStatusFailed, Metadata: model.RunMetadata{Parser: "pytest"}}
 	processed, err := Process(raw, run, nil)
 	if err != nil {
 		t.Fatalf("Process failed: %v", err)
 	}
-	if len(processed.Failures) != 2 {
-		t.Fatalf("expected two pytest failures from repeated summary lines, got %d", len(processed.Failures))
-	}
-	failure := processed.Failures[0]
-	if failure.File != "tests/test_app.py" || failure.TestName != "test_empty_state" {
-		t.Fatalf("expected pytest file/test capture, got %+v", failure)
-	}
+	return processed
 }
 
 func TestProcessGoTestFixture(t *testing.T) {

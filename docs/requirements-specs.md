@@ -1,6 +1,6 @@
 # Manta Requirement Specs
 
-Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, `TAGS-001`, and `RELRV-001` through `RELRV-003` complete
+Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, `TAGS-001`, and `RELRV-001` through `RELRV-004` complete
 Scope: Manta v0.1 standalone baseline, post-baseline hardening, schema-v2 tag selectors, and release-readiness follow-up
 Source context: standalone deterministic Manta v0.1 CLI behavior and evidence contracts.
 
