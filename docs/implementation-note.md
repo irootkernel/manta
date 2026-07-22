@@ -1,6 +1,6 @@
 # Manta Implementation Note
 
-Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, `TAGS-001`, and `RELRV-001` through `RELRV-002` complete
+Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, `TAGS-001`, and `RELRV-001` through `RELRV-003` complete
 Scope: Maintainer guidance for the standalone Manta v0.1 implementation, schema-v2 tags, release-readiness follow-up, and future changes
 
 This document explains implementation constraints and verification expectations for contributors. It is not the parent-project adoption contract; integrators should start with the [integration guide](integration-guide.md).

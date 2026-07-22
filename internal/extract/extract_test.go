@@ -381,12 +381,22 @@ func TestProcessPlaywrightFixture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Process failed: %v", err)
 	}
-	if len(processed.Failures) != 1 {
-		t.Fatalf("expected one playwright failure, got %d", len(processed.Failures))
+	want := []struct {
+		file     string
+		line     int
+		testName string
+	}{
+		{file: "tests/example.spec.ts", line: 42, testName: "renders empty state"},
+		{file: "tests/checkout.spec.ts", line: 73, testName: "submits order"},
 	}
-	failure := processed.Failures[0]
-	if failure.File != "tests/example.spec.ts" || failure.Line != 42 || failure.TestName != "renders empty state" {
-		t.Fatalf("expected playwright capture, got %+v", failure)
+	if len(processed.Failures) != len(want) {
+		t.Fatalf("expected %d playwright failures, got %d", len(want), len(processed.Failures))
+	}
+	for idx, expected := range want {
+		failure := processed.Failures[idx]
+		if failure.File != expected.file || failure.Line != expected.line || failure.TestName != expected.testName {
+			t.Fatalf("playwright failure %d = %+v, want file %q, line %d, test name %q", idx, failure, expected.file, expected.line, expected.testName)
+		}
 	}
 }
 

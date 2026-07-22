@@ -3,3 +3,9 @@
   Error: expect(locator).toBeVisible() failed
 
     at tests/example.spec.ts:42:7
+
+2) [firefox] › tests/checkout.spec.ts:73:5 › submits order
+
+  Error: expect(page).toHaveURL() failed
+
+    at tests/checkout.spec.ts:73:5

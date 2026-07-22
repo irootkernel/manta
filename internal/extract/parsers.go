@@ -13,7 +13,7 @@ var (
 	vitestCaseRE     = regexp.MustCompile(`^\s*[×✗]\s+(.+?)(?:\s+\d+ms)?$`)
 	pytestSummaryRE  = regexp.MustCompile(`^FAILED\s+([^\s:]+(?:/[^\s:]+)*)::([^\s]+)\s+-\s+(.+)$`)
 	goTestFailRE     = regexp.MustCompile(`^--- FAIL: ([^(\s]+)`)
-	playwrightFailRE = regexp.MustCompile(`^\s*\d+\)\s+\[[^\]]+\]\s+›\s+(.+?):(\d+):\d+\s+›\s+(.+?)\s+─*$`)
+	playwrightFailRE = regexp.MustCompile(`^\s*\d+\)\s+\[[^\]]+\]\s+›\s+(.+?):(\d+):\d+\s+›\s+(.+?)(?:\s+─*)?$`)
 )
 
 func parserFailures(parser string, lines []lineIndex, text string) []model.Failure {

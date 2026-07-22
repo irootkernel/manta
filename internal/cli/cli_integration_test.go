@@ -914,61 +914,87 @@ func TestOversizedFailedRunPreservesRawLog(t *testing.T) {
 	}
 }
 
-func TestConfiguredVitestRunUsesSpecializedParser(t *testing.T) {
+func TestConfiguredRunsUseSpecializedParsers(t *testing.T) {
 	t.Parallel()
-	repo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repo, ".manta", "tester"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	configText := strings.Join([]string{
-		"version: 2",
-		"commands:",
-		"  unit:",
-		"    command: [\"sh\", \"vitest.sh\"]",
-		"    tags: [unit]",
-		"    parser: vitest",
-		"    timeout_sec: 10",
-	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(configText), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	script := strings.Join([]string{
-		"#!/bin/sh",
-		"echo ' RUN  v1.6.0 /repo'",
-		"echo ''",
-		"echo ' FAIL  src/foo.test.ts > renders empty state'",
-		"echo ' AssertionError: expected false to be true'",
-		"echo ' ❯ src/foo.ts:42:13'",
-		"exit 1",
-	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(repo, "vitest.sh"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	var stdout, stderr bytes.Buffer
-	exitCode := Main([]string{"--repo", repo, "run", "unit"}, &stdout, &stderr)
-	if exitCode != 1 {
-		t.Fatalf("expected vitest run to preserve exit code 1, got %d stderr=%s", exitCode, stderr.String())
-	}
-	runsDir := filepath.Join(repo, ".manta", "runs", "standalone")
-	entries, err := os.ReadDir(runsDir)
-	if err != nil || len(entries) != 1 {
-		t.Fatalf("expected one run directory, err=%v entries=%d", err, len(entries))
-	}
-	summaryPath := filepath.Join(runsDir, entries[0].Name(), "unit.summary.json")
-	data, err := os.ReadFile(summaryPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var summary model.Summary
-	if err := json.Unmarshal(data, &summary); err != nil {
-		t.Fatal(err)
-	}
-	if len(summary.Failures) != 1 {
-		t.Fatalf("expected one specialized-parser failure, got %d", len(summary.Failures))
-	}
-	failure := summary.Failures[0]
-	if failure.File != "src/foo.ts" || failure.Line != 42 || failure.TestName != "renders empty state" {
-		t.Fatalf("expected vitest file/line/test capture, got %+v", failure)
+
+	for _, test := range []struct {
+		parser   string
+		script   string
+		file     string
+		line     int
+		testName string
+	}{
+		{
+			parser: "vitest",
+			script: `#!/bin/sh
+echo ' RUN  v1.6.0 /repo'
+echo ''
+echo ' FAIL  src/foo.test.ts > renders empty state'
+echo ' AssertionError: expected false to be true'
+echo ' ❯ src/foo.ts:42:13'
+exit 1
+`,
+			file:     "src/foo.ts",
+			line:     42,
+			testName: "renders empty state",
+		},
+		{
+			parser: "playwright",
+			script: `#!/bin/sh
+echo '1) [chromium] › tests/checkout.spec.ts:73:5 › submits order'
+echo ''
+echo '  Error: expect(page).toHaveURL() failed'
+echo ''
+echo '    at tests/checkout.spec.ts:73:5'
+exit 1
+`,
+			file:     "tests/checkout.spec.ts",
+			line:     73,
+			testName: "submits order",
+		},
+	} {
+		t.Run(test.parser, func(t *testing.T) {
+			repo := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(repo, ".manta"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			config := strings.Join([]string{
+				"version: 2",
+				"commands:",
+				"  test:",
+				"    command: [\"sh\", \"test.sh\"]",
+				"    tags: [test]",
+				"    parser: " + test.parser,
+				"    timeout_sec: 10",
+			}, "\n") + "\n"
+			if err := os.WriteFile(filepath.Join(repo, ".manta", "tester.yaml"), []byte(config), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(repo, "test.sh"), []byte(test.script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+
+			var stdout, stderr bytes.Buffer
+			exitCode := Main([]string{"--repo", repo, "--json", "run", "test"}, &stdout, &stderr)
+			if exitCode != 1 {
+				t.Fatalf("expected %s run to preserve exit code 1, got %d stderr=%s", test.parser, exitCode, stderr.String())
+			}
+			var result runResult
+			if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+				t.Fatalf("decode run result %q: %v", stdout.String(), err)
+			}
+			summary := readRunSummary(t, repo, result)
+			if summary.Parser != test.parser || summary.Status != model.RunStatusFailed || summary.ExitCode != 1 || summary.ExtractorStatus != model.ExtractorStatusPrecise {
+				t.Fatalf("unexpected %s summary contract: %+v", test.parser, summary)
+			}
+			if len(summary.Failures) != 1 {
+				t.Fatalf("expected one %s failure, got %d", test.parser, len(summary.Failures))
+			}
+			failure := summary.Failures[0]
+			if failure.File != test.file || failure.Line != test.line || failure.TestName != test.testName {
+				t.Fatalf("expected %s file/line/test capture, got %+v", test.parser, failure)
+			}
+		})
 	}
 }
 

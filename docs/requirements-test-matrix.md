@@ -33,9 +33,9 @@ This matrix records the primary evidence for every requirement marked complete. 
 | `MANTA-REQ-RQART-006` | `TestConfiguredRunAndExcerpt`; `TestExcerptSymlinkContainment` |
 | `MANTA-REQ-RQART-007` | `TestArtifactOutputDirectories`; `TestRunIDArtifactLayout` |
 | `MANTA-REQ-RQEXT-001` | `TestProcessGenericFailureProducesPreciseSpan` |
-| `MANTA-REQ-RQEXT-002` | `TestValidateAcceptsImplementedParsers`; specialized parser fixture tests |
+| `MANTA-REQ-RQEXT-002` | `TestValidateAcceptsImplementedParsers`; `TestProcessVitestFixture`; `TestProcessPytestFixture`; `TestProcessGoTestFixture`; `TestProcessPlaywrightFixture`; `TestConfiguredRunsUseSpecializedParsers` |
 | `MANTA-REQ-RQEXT-003` | `TestProcessGenericFailureProducesPreciseSpan`; `TestProcessRulesBoundsUnvalidatedContext` |
-| `MANTA-REQ-RQEXT-004` | `TestProcessGenericFailureProducesPreciseSpan`; specialized parser fixture tests |
+| `MANTA-REQ-RQEXT-004` | `TestProcessGenericFailureProducesPreciseSpan`; `TestProcessVitestFixture`; `TestProcessPytestFixture`; `TestProcessGoTestFixture`; `TestProcessPlaywrightFixture`; `TestConfiguredRunsUseSpecializedParsers` |
 | `MANTA-REQ-RQEXT-005` | `TestProcessExtractorStatusContract`; `TestNoisyRunsWriteBoundedTerminalArtifacts` |
 | `MANTA-REQ-RQEXT-006` | `TestProcessExtractorStatusContract`; `TestBinaryExtractionContracts` |
 | `MANTA-REQ-RQEXT-007` | `TestMaterializeArtifactsExtractionErrorContract`; `TestBinaryExtractionContracts` |

@@ -1,6 +1,6 @@
 # Manta Todo
 
-Status: 7 open items from the v0.1.4 release-readiness review
+Status: 6 open items from the v0.1.4 release-readiness review
 Scope: Documentation and implementation follow-up notes
 
 ## Todo status legend
@@ -16,13 +16,6 @@ Tag and publish `v0.1.4` only after the items below are closed and the release-r
 ## Open items
 
 Items are listed in recommended fix order. Line references were verified against the current tree and may drift as fixes land.
-
-### RELRV-003 `Open` — Playwright parser misses failure headers without trailing padding
-
-- Severity: medium.
-- Problem: `playwrightFailRE` ends in `\s+─*$`, so a realistic failure header with no trailing decoration (plausible for non-TTY or CI-piped output) produces zero matches; because specialized parsers never fall back to generic extraction, a real failure surfaces only as `degraded` with no failure span.
-- Evidence: `internal/extract/parsers.go:16`.
-- Done when: the regex accepts unpadded headers, the fixture gains an unpadded failure line, and parser tests assert file/line/test capture for both shapes.
 
 ### RELRV-004 `Open` — Pytest parser cannot capture line numbers; fixture is unrealistic
 
