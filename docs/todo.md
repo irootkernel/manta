@@ -1,6 +1,6 @@
 # Manta Todo
 
-Status: 4 open items from the v0.1.4 release-readiness review
+Status: 3 open items from the v0.1.4 release-readiness review
 Scope: Documentation and implementation follow-up notes
 
 ## Todo status legend
@@ -16,13 +16,6 @@ Tag and publish `v0.1.4` only after the items below are closed and the release-r
 ## Open items
 
 Items are listed in recommended fix order. Line references were verified against the current tree and may drift as fixes land.
-
-### RELRV-006 `Open` — Interrupted-run hash integrity; defensive rule-regex handling
-
-- Severity: medium (low-probability windows).
-- Problem: (a) on the interrupt and timeout paths the runner discards the copier/`cmd.Wait` error, and `raw_log_sha256` is computed from the in-memory mirror, so a mid-run raw-log write failure (ENOSPC, EIO) combined with SIGINT/SIGTERM/timeout publishes a hash that does not match the shorter on-disk raw log; the normal completion path already fails closed with exit `4`. (b) `extract` compiles rule start/end regexes with discarded errors and dereferences the resulting nil regex; unreachable through the CLI because stored rules are pre-validated, but it panics for unvalidated in-memory rules, contradicting the defensive-bounds intent that already covers integer bounds.
-- Evidence: `internal/runner/runner.go:27-36` and the interrupt/timeout drains around `internal/runner/runner.go:77-130`; `internal/cli/cli.go:280`; `internal/extract/extract.go:83-96`.
-- Done when: raw-log write errors on interrupted and timed-out paths surface as explicit artifact/internal errors, or the recorded hash reflects persisted bytes, covered by a fault-injection test; rule regex compile errors are checked and reported instead of dereferenced.
 
 ### RELRV-007 `Open` — Fix the fixture-backed vitest rule example in the implementation note
 

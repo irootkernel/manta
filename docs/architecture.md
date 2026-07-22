@@ -67,6 +67,8 @@ CLI
 10. CLI exits with the underlying test command status or a documented Manta internal error code.
 ```
 
+Steps 7 through 9 run only after raw-log open, streaming, close, and validation all succeed. A failure in that raw-log stage exits with artifact code `3`; a streaming or close failure may leave a partial raw log, but the invocation does not write new excerpts, summary/status artifacts, or their hashes. Fixed `--run-id` paths may still contain artifacts from an earlier invocation, so the process exit and caller-owned run/command uniqueness remain authoritative.
+
 On Unix, the runner starts the command in its own process group. SIGINT and SIGTERM are forwarded to the group, with a two-second grace period before remaining members are force-killed. Interrupted runs retain partial raw evidence, produce `status: killed`, and use the process-compatible exit codes `130` and `143` respectively.
 
 ## Data flow: summarize existing raw log

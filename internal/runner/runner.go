@@ -22,23 +22,29 @@ type streamCapture struct {
 	mu  sync.Mutex
 	raw io.Writer
 	b   bytes.Buffer
+	err error
 }
 
 func (c *streamCapture) Write(p []byte) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	_, _ = c.b.Write(p)
 	n, err := c.raw.Write(p)
 	if err == nil && n != len(p) {
 		err = io.ErrShortWrite
 	}
+	if n > 0 {
+		_, _ = c.b.Write(p[:n])
+	}
+	if err != nil && c.err == nil {
+		c.err = err
+	}
 	return n, err
 }
 
-func (c *streamCapture) Bytes() []byte {
+func (c *streamCapture) result() ([]byte, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.b.Bytes()
+	return c.b.Bytes(), c.err
 }
 
 func Execute(ctx context.Context, workDir, commandID string, tags []string, parser string, argv []string, timeoutSec int, raw io.Writer) (model.RunOutput, error) {
@@ -73,63 +79,78 @@ func executeWithSignals(ctx context.Context, workDir, commandID string, tags []s
 		waited <- cmd.Wait()
 	}()
 
+	var status model.RunStatus
+	var exitCode int
 	select {
 	case err := <-waited:
 		_ = cleanupProcessGroup(cmd)
 		if errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
 			err = nil
 		}
-		output := completedOutput(started, commandID, tags, parser, argv, capture)
+		output, captureErr := completedOutput(started, commandID, tags, parser, argv, capture)
+		if captureErr != nil {
+			return model.RunOutput{}, captureErr
+		}
 		return classifyWait(output, err)
 	case sig := <-interrupts:
-		return finishInterrupted(started, commandID, tags, parser, argv, capture, cmd, waited, interrupts, sig, gracePeriod), nil
+		finishInterrupted(cmd, waited, interrupts, sig, gracePeriod)
+		status = model.RunStatusKilled
+		exitCode = signalExitCode(sig)
 	case <-runCtx.Done():
 		select {
 		case sig := <-interrupts:
-			return finishInterrupted(started, commandID, tags, parser, argv, capture, cmd, waited, interrupts, sig, gracePeriod), nil
+			finishInterrupted(cmd, waited, interrupts, sig, gracePeriod)
+			status = model.RunStatusKilled
+			exitCode = signalExitCode(sig)
 		default:
+			_ = killProcess(cmd)
+			<-waited
+			if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+				status = model.RunStatusTimedOut
+				exitCode = int(model.ExitCodeTimeout)
+			} else {
+				status = model.RunStatusKilled
+				exitCode = 137
+			}
 		}
-		_ = killProcess(cmd)
-		<-waited
-		output := completedOutput(started, commandID, tags, parser, argv, capture)
-		if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
-			output.Status = model.RunStatusTimedOut
-			output.Metadata.ExitCode = int(model.ExitCodeTimeout)
-		} else {
-			output.Status = model.RunStatusKilled
-			output.Metadata.ExitCode = 137
-		}
-		return output, nil
 	}
+
+	output, err := completedOutput(started, commandID, tags, parser, argv, capture)
+	if err != nil {
+		return model.RunOutput{}, err
+	}
+	output.Status = status
+	output.Metadata.ExitCode = exitCode
+	return output, nil
 }
 
-func finishInterrupted(started time.Time, commandID string, tags []string, parser string, argv []string, capture *streamCapture, cmd *exec.Cmd, waited <-chan error, interrupts <-chan os.Signal, sig os.Signal, gracePeriod time.Duration) model.RunOutput {
+func finishInterrupted(cmd *exec.Cmd, waited <-chan error, interrupts <-chan os.Signal, sig os.Signal, gracePeriod time.Duration) {
 	if err := signalProcess(cmd, sig); err != nil {
 		_ = killProcess(cmd)
 		<-waited
-	} else {
-		timer := time.NewTimer(gracePeriod)
-		select {
-		case <-waited:
-			timer.Stop()
-			// Wait reaps the command leader; its process group may still contain descendants.
-			_ = killProcess(cmd)
-		case <-interrupts:
-			timer.Stop()
-			_ = killProcess(cmd)
-			<-waited
-		case <-timer.C:
-			_ = killProcess(cmd)
-			<-waited
-		}
+		return
 	}
-	output := completedOutput(started, commandID, tags, parser, argv, capture)
-	output.Status = model.RunStatusKilled
-	output.Metadata.ExitCode = signalExitCode(sig)
-	return output
+	timer := time.NewTimer(gracePeriod)
+	select {
+	case <-waited:
+		timer.Stop()
+		// Wait reaps the command leader; its process group may still contain descendants.
+		_ = killProcess(cmd)
+	case <-interrupts:
+		timer.Stop()
+		_ = killProcess(cmd)
+		<-waited
+	case <-timer.C:
+		_ = killProcess(cmd)
+		<-waited
+	}
 }
 
-func completedOutput(started time.Time, commandID string, tags []string, parser string, argv []string, capture *streamCapture) model.RunOutput {
+func completedOutput(started time.Time, commandID string, tags []string, parser string, argv []string, capture *streamCapture) (model.RunOutput, error) {
+	raw, err := capture.result()
+	if err != nil {
+		return model.RunOutput{}, model.NewMantaError(model.ExitCodeArtifactError, "write raw log", err)
+	}
 	ended := time.Now().UTC()
 	return model.RunOutput{
 		Metadata: model.RunMetadata{
@@ -141,8 +162,8 @@ func completedOutput(started time.Time, commandID string, tags []string, parser 
 			EndedAt:     ended,
 			DurationMS:  ended.Sub(started).Milliseconds(),
 		},
-		RawLogBytes: capture.Bytes(),
-	}
+		RawLogBytes: raw,
+	}, nil
 }
 
 func classifyWait(output model.RunOutput, err error) (model.RunOutput, error) {

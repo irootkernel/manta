@@ -210,6 +210,8 @@ See the [architecture extraction policy](architecture.md#failure-and-degraded-ex
 
 `status.json` is the stable watcher boundary. Manta materializes it after command execution and extraction finish; it does not write a `running` state or heartbeat. Until the file appears, the parent must distinguish “still running” from “invocation failed before artifact materialization” using its own process state.
 
+A raw-log open, streaming, close, or validation failure exits with artifact code `3` and does not materialize a new status or summary. A streaming or close failure may leave a partial raw log, and a reused fixed `--run-id` path may still contain artifacts from an earlier invocation; neither is a completion signal. Use the process result as authoritative, and keep the parent-owned run/command uniqueness and retry-retention policy described above.
+
 A watcher that suppresses duplicate notifications must hash exactly this ordered input set:
 
 1. `command_id`

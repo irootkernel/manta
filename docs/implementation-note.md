@@ -177,13 +177,14 @@ Tests should cover:
 - Failing command with obvious error span.
 - Failing command with no parser match, producing degraded extraction.
 - Timeout with partial log.
+- Injected partial raw-log writer failures after normal completion, timeout, and Unix interruption, plus CLI integration coverage that preserves the partial raw log while failing closed with artifact exit `3` before summary/status hashing.
 - Built-binary SIGINT and SIGTERM handling on Unix across standalone and `--run-id` layouts, including process-group forwarding, partial raw evidence, `killed` status, and exit codes `130` and `143`.
 - Redaction of summary/status/console command metadata, failure/warning fields, and excerpts, with hashes calculated from final redacted values.
 - Literal artifact references remaining resolvable even when command metadata is redacted.
 - Noise filtering in summary while raw log remains unchanged.
 - Rule test with expected span.
 - Rule overmatch rejection.
-- Extreme rule context values failing closed before command execution, plus defensive extraction bounds that prevent overflow or panic for unvalidated in-memory rules.
+- Extreme rule context values failing closed before command execution, plus defensive extraction bounds and regex compilation errors that prevent overflow or panic for unvalidated in-memory rules.
 - Exact-limit and oversized config, stored rule, imported rule, and `rules propose` raw-log inputs, including config exit `2` and absence of command or output side effects.
 - Artifact path generation for `.manta/`, caller-selected `--output-dir`, and `.manta/runs/scoped/<run_id>/...` layouts, plus built-binary rejection of external `.manta/runs/standalone` and `.manta/runs/scoped` symlinks before command execution.
 - Sequential, goroutine-concurrent, and cross-process standalone directory allocation within one UTC-second interval, including configured, ad-hoc, and summarize evidence preservation.

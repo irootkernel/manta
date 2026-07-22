@@ -319,6 +319,70 @@ func TestProcessRulesBoundsUnvalidatedContext(t *testing.T) {
 	}
 }
 
+func TestProcessRulesRejectsInvalidRegex(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		field  string
+		mutate func(*model.Rule)
+	}{
+		{
+			name:  "start",
+			field: "match.start",
+			mutate: func(rule *model.Rule) {
+				rule.Match.Start.Regex = "["
+			},
+		},
+		{
+			name:  "end",
+			field: "match.end.any_of[0]",
+			mutate: func(rule *model.Rule) {
+				rule.Match.End.AnyOf[0].Regex = "["
+			},
+		},
+		{
+			name:  "file line",
+			field: "extract.file_line",
+			mutate: func(rule *model.Rule) {
+				rule.Extract.FileLine.Regex = "["
+			},
+		},
+		{
+			name:  "test name",
+			field: "extract.test_name",
+			mutate: func(rule *model.Rule) {
+				rule.Extract.TestName.Regex = "["
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			rule := model.Rule{
+				ID: "invalid-regex-v1",
+				Match: model.RuleMatch{
+					Start: model.RuleRegex{Regex: `^FAIL$`},
+					End:   model.RuleEnd{AnyOf: []model.RuleRegex{{Regex: `^$`}}, MaxBlockLines: 10},
+				},
+				Extract: model.RuleExtract{
+					FileLine: model.RuleExtractField{Regex: `(?P<file>[^:]+):(?P<line>\d+)`},
+					TestName: model.RuleExtractField{Regex: `(?P<test>.+)`},
+				},
+			}
+			tt.mutate(&rule)
+
+			_, err := ProcessRules([]byte("FAIL\nfile.go:1\n\n"), model.RunOutput{Status: model.RunStatusFailed}, []model.Rule{rule})
+
+			if model.ExitCodeFor(err) != int(model.ExitCodeParserError) {
+				t.Fatalf("expected parser error %d, got %v", model.ExitCodeParserError, err)
+			}
+			if !strings.Contains(err.Error(), `rule "invalid-regex-v1"`) || !strings.Contains(err.Error(), tt.field) {
+				t.Fatalf("expected rule and field context in error, got %v", err)
+			}
+		})
+	}
+}
+
 func TestProcessVitestFixture(t *testing.T) {
 	t.Parallel()
 	raw := readFixture(t, "vitest.raw.log")

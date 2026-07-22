@@ -39,7 +39,10 @@ func ProcessRules(raw []byte, run model.RunOutput, rules []model.Rule) (model.Ru
 func process(text string, run model.RunOutput, rules []model.Rule, parserFallback bool) (model.RunOutput, error) {
 	scan, startByte, lineOffset, truncated := boundedTail(text)
 	lines := buildLineIndex(scan, startByte, lineOffset)
-	failures := applyRules(lines, text, rules)
+	failures, err := applyRules(lines, text, rules)
+	if err != nil {
+		return run, err
+	}
 	if len(failures) == 0 && parserFallback {
 		failures = parserFailures(run.Metadata.Parser, lines, text)
 	}
@@ -97,22 +100,34 @@ func buildLineIndex(text string, startByte, lineOffset int) []lineIndex {
 	return lines
 }
 
-func applyRules(lines []lineIndex, text string, rules []model.Rule) []model.Failure {
+func applyRules(lines []lineIndex, text string, rules []model.Rule) ([]model.Failure, error) {
 	failures := make([]model.Failure, 0)
 	seen := map[string]bool{}
 	for _, rule := range rules {
-		startRE, _ := regexp.Compile(rule.Match.Start.Regex)
+		startRE, err := compileRuleRegex(rule.ID, "match.start", rule.Match.Start.Regex)
+		if err != nil {
+			return nil, err
+		}
 		endREs := make([]*regexp.Regexp, 0, len(rule.Match.End.AnyOf))
-		for _, expr := range rule.Match.End.AnyOf {
-			re, _ := regexp.Compile(expr.Regex)
+		for idx, expr := range rule.Match.End.AnyOf {
+			re, err := compileRuleRegex(rule.ID, fmt.Sprintf("match.end.any_of[%d]", idx), expr.Regex)
+			if err != nil {
+				return nil, err
+			}
 			endREs = append(endREs, re)
 		}
 		var fileRE, testRE *regexp.Regexp
 		if rule.Extract.FileLine.Regex != "" {
-			fileRE, _ = regexp.Compile(rule.Extract.FileLine.Regex)
+			fileRE, err = compileRuleRegex(rule.ID, "extract.file_line", rule.Extract.FileLine.Regex)
+			if err != nil {
+				return nil, err
+			}
 		}
 		if rule.Extract.TestName.Regex != "" {
-			testRE, _ = regexp.Compile(rule.Extract.TestName.Regex)
+			testRE, err = compileRuleRegex(rule.ID, "extract.test_name", rule.Extract.TestName.Regex)
+			if err != nil {
+				return nil, err
+			}
 		}
 		for idx, line := range lines {
 			if !startRE.MatchString(line.text) {
@@ -148,7 +163,15 @@ func applyRules(lines []lineIndex, text string, rules []model.Rule) []model.Fail
 			failures = append(failures, failure)
 		}
 	}
-	return failures
+	return failures, nil
+}
+
+func compileRuleRegex(ruleID, field, expr string) (*regexp.Regexp, error) {
+	re, err := regexp.Compile(expr)
+	if err != nil {
+		return nil, model.NewMantaError(model.ExitCodeParserError, "extract rule", fmt.Errorf("rule %q %s invalid regex: %w", ruleID, field, err))
+	}
+	return re, nil
 }
 
 func genericFailures(lines []lineIndex) []model.Failure {

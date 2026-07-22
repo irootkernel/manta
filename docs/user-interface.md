@@ -287,6 +287,8 @@ Tags are rule selectors, not command selectors or automatic rule generators. The
 | Other Manta parser/rule internal error | documented internal code, recommended `4` |
 | Successful `summarize` or `excerpt` | `0` |
 
+A raw-log open, streaming, close, or validation failure uses artifact exit code `3`. A streaming or close failure may leave a partial raw log, but that invocation does not write new excerpts, summary/status artifacts, or their hashes. Because fixed `--run-id` paths can retain artifacts from an earlier invocation, callers must use the process exit and their own run/command uniqueness policy rather than artifact presence alone.
+
 ## Markdown summary shape
 
 ```markdown

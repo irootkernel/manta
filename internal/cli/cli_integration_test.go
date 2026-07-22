@@ -2,9 +2,12 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -403,6 +406,43 @@ func TestRawLogOpenFailurePreventsCommandExecution(t *testing.T) {
 	}
 	if string(data) != "unchanged\n" {
 		t.Fatalf("external raw target changed: %q", data)
+	}
+}
+
+func TestRawLogWriteFailureDoesNotPublishDerivedArtifacts(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	writeMarkerCommandConfig(t, repo, "unit")
+	injectedErr := errors.New("injected raw-log write failure")
+	partialRaw := []byte("partial raw evidence\n")
+	execute := func(_ context.Context, _, _ string, _ []string, _ string, _ []string, _ int, raw io.Writer) (model.RunOutput, error) {
+		if _, err := raw.Write(partialRaw); err != nil {
+			return model.RunOutput{}, err
+		}
+		return model.RunOutput{}, model.NewMantaError(model.ExitCodeArtifactError, "write raw log", injectedErr)
+	}
+
+	var stdout, stderr bytes.Buffer
+	exitCode := runCommand(globalOptions{RepoRoot: repo, RunID: "write-failure"}, []string{"unit"}, &stdout, &stderr, execute)
+
+	if exitCode != int(model.ExitCodeArtifactError) {
+		t.Fatalf("expected artifact exit code %d, got %d stdout=%s stderr=%s", model.ExitCodeArtifactError, exitCode, stdout.String(), stderr.String())
+	}
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "write raw log: "+injectedErr.Error()) {
+		t.Fatalf("unexpected CLI output: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	base := filepath.Join(repo, ".manta", "runs", "scoped", "write-failure", "artifacts", "test")
+	raw, err := os.ReadFile(filepath.Join(base, "unit.raw.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(raw, partialRaw) {
+		t.Fatalf("partial raw log = %q, want %q", raw, partialRaw)
+	}
+	for _, name := range []string{"unit.summary.json", "unit.summary.md", "unit.status.json"} {
+		if _, err := os.Stat(filepath.Join(base, name)); !os.IsNotExist(err) {
+			t.Fatalf("derived artifact %s was published, stat error=%v", name, err)
+		}
 	}
 }
 

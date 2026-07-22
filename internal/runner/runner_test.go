@@ -3,6 +3,7 @@ package runner
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,66 @@ import (
 
 	"github.com/irootkernel/manta/internal/model"
 )
+
+var errInjectedRawLogWrite = errors.New("injected raw-log write failure")
+
+type faultWriter struct {
+	persisted bytes.Buffer
+	attempted chan struct{}
+}
+
+func newFaultWriter() *faultWriter {
+	return &faultWriter{attempted: make(chan struct{}, 1)}
+}
+
+func (w *faultWriter) Write(p []byte) (int, error) {
+	n := len(p) / 2
+	if n == 0 && len(p) > 0 {
+		n = 1
+	}
+	_, _ = w.persisted.Write(p[:n])
+	select {
+	case w.attempted <- struct{}{}:
+	default:
+	}
+	return n, errInjectedRawLogWrite
+}
+
+func requireRawLogWriteError(t *testing.T, output model.RunOutput, err error, raw *faultWriter, complete string) {
+	t.Helper()
+	if model.ExitCodeFor(err) != int(model.ExitCodeArtifactError) {
+		t.Fatalf("expected artifact error %d, got output=%+v err=%v", model.ExitCodeArtifactError, output, err)
+	}
+	if !errors.Is(err, errInjectedRawLogWrite) {
+		t.Fatalf("expected injected writer error, got %v", err)
+	}
+	if output.Status != "" || len(output.RawLogBytes) != 0 {
+		t.Fatalf("expected no publishable run output, got %+v", output)
+	}
+	if raw.persisted.Len() == 0 || raw.persisted.Len() >= len(complete) {
+		t.Fatalf("expected partial persisted bytes, got %q", raw.persisted.String())
+	}
+}
+
+func TestExecuteReportsRawLogWriteFailure(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	raw := newFaultWriter()
+
+	output, err := Execute(context.Background(), repo, "write-failure", []string{"unit"}, "generic", []string{"sh", "-c", "printf complete"}, 10, raw)
+
+	requireRawLogWriteError(t, output, err, raw, "complete")
+}
+
+func TestExecuteTimeoutReportsRawLogWriteFailure(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	raw := newFaultWriter()
+
+	output, err := Execute(context.Background(), repo, "timeout-write-failure", []string{"unit"}, "generic", []string{"sh", "-c", "printf started; while :; do sleep 1; done"}, 1, raw)
+
+	requireRawLogWriteError(t, output, err, raw, "started")
+}
 
 func TestExecuteTimeout(t *testing.T) {
 	t.Parallel()

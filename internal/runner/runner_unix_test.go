@@ -61,6 +61,37 @@ func TestExecuteForwardsTerminationAndNormalizesResult(t *testing.T) {
 	}
 }
 
+func TestExecuteInterruptedReportsRawLogWriteFailure(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	script := filepath.Join(repo, "write-failure.sh")
+	content := "#!/bin/sh\nprintf started\ntouch ready\nwhile :; do sleep 1; done\n"
+	if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw := newFaultWriter()
+	interrupts := make(chan os.Signal, 2)
+	type result struct {
+		output model.RunOutput
+		err    error
+	}
+	finished := make(chan result, 1)
+	go func() {
+		output, err := executeWithSignals(context.Background(), repo, "write-failure", []string{"unit"}, "generic", []string{"sh", "write-failure.sh"}, 10, raw, interrupts, 100*time.Millisecond)
+		finished <- result{output: output, err: err}
+	}()
+	waitForFile(t, filepath.Join(repo, "ready"))
+	select {
+	case <-raw.attempted:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for raw-log write attempt")
+	}
+	interrupts <- syscall.SIGTERM
+	resultValue := <-finished
+
+	requireRawLogWriteError(t, resultValue.output, resultValue.err, raw, "started")
+}
+
 func TestExecuteCleansDescendantsAfterLeaderExits(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()

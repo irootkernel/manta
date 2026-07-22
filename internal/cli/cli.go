@@ -47,6 +47,7 @@ type runResult struct {
 type materializationSource uint8
 
 type extractionProcessor func([]byte, model.RunOutput, []model.Rule) (model.RunOutput, error)
+type commandExecutor func(context.Context, string, string, []string, string, []string, int, io.Writer) (model.RunOutput, error)
 
 const (
 	materializationExecutedCommand materializationSource = iota
@@ -84,7 +85,7 @@ func Run(args []string, stdout, stderr io.Writer, info BuildInfo) int {
 
 	switch remaining[0] {
 	case "run":
-		return runCommand(opts, remaining[1:], stdout, stderr)
+		return runCommand(opts, remaining[1:], stdout, stderr, runner.Execute)
 	case "excerpt":
 		return excerptCommand(opts, remaining[1:], stdout, stderr)
 	case "summarize":
@@ -130,7 +131,7 @@ func versionCommand(opts globalOptions, args []string, stdout, stderr io.Writer,
 	return 0
 }
 
-func runCommand(opts globalOptions, args []string, stdout, stderr io.Writer) int {
+func runCommand(opts globalOptions, args []string, stdout, stderr io.Writer, execute commandExecutor) int {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var tags stringList
@@ -164,7 +165,7 @@ func runCommand(opts globalOptions, args []string, stdout, stderr io.Writer) int
 		req.CommandID = rest[0]
 	}
 
-	result, exitCode, err := executeRun(req)
+	result, exitCode, err := executeRun(req, execute)
 	if err != nil {
 		writeLine(stderr, err)
 		return model.ExitCodeFor(err)
@@ -220,7 +221,7 @@ func summarizeCommand(opts globalOptions, args []string, stdout, stderr io.Write
 	return exitCode
 }
 
-func executeRun(req model.RunRequest) (runResult, int, error) {
+func executeRun(req model.RunRequest, execute commandExecutor) (runResult, int, error) {
 	allowMissing := req.Mode == model.RunModeAdHoc
 	cfg, _, err := config.Load(req.RepoRoot, req.ConfigPath, allowMissing)
 	if err != nil {
@@ -268,7 +269,7 @@ func executeRun(req model.RunRequest) (runResult, int, error) {
 	if err != nil {
 		return runResult{}, 0, err
 	}
-	runOutput, runErr := runner.Execute(context.Background(), req.RepoRoot, commandID, tags, parser, argv, timeoutSec, rawFile)
+	runOutput, runErr := execute(context.Background(), req.RepoRoot, commandID, tags, parser, argv, timeoutSec, rawFile)
 	closeErr := rawFile.Close()
 	if closeErr != nil {
 		return runResult{}, 0, model.NewMantaError(model.ExitCodeArtifactError, "close raw log", closeErr)
