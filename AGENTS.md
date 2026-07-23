@@ -7,7 +7,7 @@ Manta is a standalone deterministic Go CLI for running test commands, preserving
 Current local-dev baseline:
 
 - Manta: `manta 0.1.4`
-- Project root: `/Users/draccoon/Workspace/SeventeenthEarth/manta`
+- Project root: `/Users/draccoon/Workspace/SeventeenthEarth/kkachi/kkachi-agent-tester`
 - Manta standalone evidence: `.manta/`
 
 ## 1. Source Of Truth

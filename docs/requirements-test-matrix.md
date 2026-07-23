@@ -3,7 +3,7 @@
 Status: Complete for the current checked requirements
 Scope: Primary executable or documentary evidence for each completed requirement in `requirements-specs.md`
 
-This matrix records the primary evidence for every requirement marked complete. The audit regression suite fails when a completed requirement is missing, duplicated, has no evidence, or when the matrix references an unknown or incomplete requirement.
+This matrix records the primary evidence for every requirement marked complete. The audit regression suite fails when a completed requirement is missing, duplicated, has no evidence, cites a `Test*` identifier that does not resolve to a repository Go test, or references an unknown or incomplete requirement. Every row must cite at least one resolvable test unless its requirement ID is an explicit non-test evidence exception in the audit regression test.
 
 | Requirement | Primary evidence |
 |---|---|
@@ -53,7 +53,7 @@ This matrix records the primary evidence for every requirement marked complete. 
 | `MANTA-REQ-RQSEC-004` | `TestWriteSummaryJSONFailsWhenTooLarge`; `TestProcessOversizedLogUsesBoundedTail`; `TestProcessPytestDetailScanIsBounded`; `TestProcessRulesRejectsOversizedInput`; `TestTestRuleBoundsFixtureBeforeExtraction`; `TestBoundSummaryEvidenceCapsRecordsAndKeepsCountsAligned`; `TestBoundSummaryEvidenceUsesRenderedByteBudget`; `TestBoundSummaryEvidenceUsesRemainingBudgetForWarnings`; `TestNoisyRunsWriteBoundedTerminalArtifacts`; `TestLoadEnforcesInputSizeLimit`; `TestLoadAllEnforcesRuleFileSizeLimit`; `TestRuleSourceFilesEnforceInputSizeLimit`; `TestProposeEnforcesRawLogInputSizeLimit`; `TestBinaryEnforcesRuleAndConfigInputSizeLimits` |
 | `MANTA-REQ-RQSEC-005` | `TestProcessExtractorStatusContract`; `TestBinaryExtractionContracts` |
 | `MANTA-REQ-RQWAT-001` | `TestConfiguredRunAndExcerpt`; `TestRawLogWriteFailureDoesNotPublishDerivedArtifacts`; status-hash assertions in CLI and binary tests; `TestNoisyRunsWriteBoundedTerminalArtifacts` |
-| `MANTA-REQ-RQWAT-002` | `ComputeStatusHash`; status-hash assertions in CLI and binary tests |
+| `MANTA-REQ-RQWAT-002` | `TestComputeStatusHashIncludesTags`; status-hash assertions in CLI and binary tests |
 | `MANTA-REQ-RQWAT-003` | `TestBinaryJSONRedactsCommandMetadata`; `TestDocumentedCLIWorkflowAgainstFreshFixture` |
 | `MANTA-REQ-RQDOC-001` | authoritative documents listed in `AGENTS.md` and `README.md`; `TestArchitectureJSONContractExamplesMatchFreshRunArtifacts` |
 | `MANTA-REQ-RQDOC-002` | `TestDocumentedCLIWorkflowAgainstFreshFixture` |

@@ -1,6 +1,6 @@
 # Manta Requirement Specs
 
-Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, `TAGS-001`, and `RELRV-001` through `RELRV-008` complete
+Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, `TAGS-001`, and `RELRV-001` through `RELRV-009` complete
 Scope: Manta v0.1 standalone baseline, post-baseline hardening, schema-v2 tag selectors, and release-readiness follow-up
 Source context: standalone deterministic Manta v0.1 CLI behavior and evidence contracts.
 
@@ -11,7 +11,7 @@ Source context: standalone deterministic Manta v0.1 CLI behavior and evidence co
 - `[x]` Complete
 - `Blocked` means external decision or missing dependency prevents implementation.
 
-Implementation note: the original v0.1 roadmap and the recorded `RQHAR` hardening requirements are implemented. A checked requirement means that specific behavior is implemented and mapped to evidence; it does not imply support for capabilities outside its wording. See the [integration guide](integration-guide.md) for the current capability matrix and explicit v0.1 boundaries. Open v0.1.4 release-readiness review items are recorded in `todo.md`.
+Implementation note: the original v0.1 roadmap and the recorded `RQHAR` hardening requirements are implemented. A checked requirement means that specific behavior is implemented and mapped to evidence; it does not imply support for capabilities outside its wording. See the [integration guide](integration-guide.md) for the current capability matrix and explicit v0.1 boundaries. No open implementation items are currently recorded in `todo.md`.
 
 ## RQCLI: Command-line interface
 

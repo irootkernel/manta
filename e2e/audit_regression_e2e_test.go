@@ -3,6 +3,10 @@ package e2e
 import (
 	"bytes"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/irootkernel/manta/internal/model"
 	"github.com/irootkernel/manta/internal/safety"
@@ -127,37 +133,267 @@ func TestRequirementTraceabilityMatrixCoversCompletedRequirements(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	testFunctions, err := repositoryTestFunctions(root)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	completedPattern := regexp.MustCompile(`(?m)^- \[x\] \x60(MANTA-REQ-[A-Z0-9-]+)\x60`)
-	rowPattern := regexp.MustCompile(`(?m)^\| \x60(MANTA-REQ-[A-Z0-9-]+)\x60 \| ([^|]+) \|$`)
+	for _, message := range requirementTraceabilityErrors(specData, matrixData, testFunctions, nonTestEvidenceRequirements) {
+		t.Error(message)
+	}
+}
+
+func TestRequirementTraceabilityAuditRejectsInvalidEvidence(t *testing.T) {
+	t.Parallel()
+	testFunctions := map[string]bool{"TestPresent": true}
+	testCases := []struct {
+		name       string
+		spec       string
+		matrix     string
+		exceptions map[string]bool
+		want       string
+	}{
+		{
+			name:   "unresolved test citation",
+			spec:   "- [x] `MANTA-REQ-RQCLI-001` Example.\n",
+			matrix: "| `MANTA-REQ-RQCLI-001` | `TestMissing` |\n",
+			want:   "references missing test TestMissing",
+		},
+		{
+			name:   "unapproved non-test evidence",
+			spec:   "- [x] `MANTA-REQ-RQCLI-001` Example.\n",
+			matrix: "| `MANTA-REQ-RQCLI-001` | `make test` |\n",
+			want:   "has no cited test and is not an explicit non-test exception",
+		},
+		{
+			name:       "stale non-test exception",
+			spec:       "- [x] `MANTA-REQ-RQDOC-004` Example.\n",
+			matrix:     "| `MANTA-REQ-RQDOC-004` | `TestPresent` |\n",
+			exceptions: map[string]bool{"MANTA-REQ-RQDOC-004": true},
+			want:       "explicit non-test exception now cites a test",
+		},
+		{
+			name:       "orphaned non-test exception",
+			spec:       "- [x] `MANTA-REQ-RQCLI-001` Example.\n",
+			matrix:     "| `MANTA-REQ-RQCLI-001` | `TestPresent` |\n",
+			exceptions: map[string]bool{"MANTA-REQ-RQDOC-004": true},
+			want:       "explicit non-test exception has no traceability row",
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			messages := requirementTraceabilityErrors([]byte(testCase.spec), []byte(testCase.matrix), testFunctions, testCase.exceptions)
+			if got := strings.Join(messages, "\n"); !strings.Contains(got, testCase.want) {
+				t.Fatalf("expected %q in audit errors:\n%s", testCase.want, got)
+			}
+		})
+	}
+}
+
+func TestRepositoryTestFunctions(t *testing.T) {
+	t.Parallel()
+
+	t.Run("finds only runnable Go tests", func(t *testing.T) {
+		root := t.TempDir()
+		writeAuditGoFixture(t, root, "functions_test.go", `package fixture
+
+import "testing"
+
+func TestValid(t *testing.T) {}
+
+type suite struct{}
+
+func TesticularCancer(t *testing.T) {}
+func TestWrongSignature() {}
+func TestReturnsValue(t *testing.T) error { return nil }
+func TestTwoArguments(t *testing.T, value string) {}
+func TestValueArgument(t testing.T) {}
+func (suite) TestMethod(t *testing.T) {}
+`)
+		writeAuditGoFixture(t, root, "production.go", `package fixture
+
+import "testing"
+
+func TestProductionFunction(t *testing.T) {}
+`)
+		const ignoredTest = `package fixture
+
+import "testing"
+
+func TestIgnored(t *testing.T) {}
+`
+		for _, directory := range []string{".manta", "vendor"} {
+			writeAuditGoFixture(t, root, filepath.Join(directory, "hidden_test.go"), ignoredTest)
+		}
+
+		functions, err := repositoryTestFunctions(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(functions) != 1 || !functions["TestValid"] {
+			t.Fatalf("expected only TestValid, got %v", functions)
+		}
+	})
+
+	t.Run("reports malformed test files", func(t *testing.T) {
+		root := t.TempDir()
+		writeAuditGoFixture(t, root, "malformed_test.go", "package fixture\nfunc TestMalformed(")
+		if _, err := repositoryTestFunctions(root); err == nil || !strings.Contains(err.Error(), "parse Go test file") {
+			t.Fatalf("expected Go test parse error, got %v", err)
+		}
+	})
+}
+
+func writeAuditGoFixture(t *testing.T, root, relativePath, contents string) {
+	t.Helper()
+	path := filepath.Join(root, relativePath)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+var (
+	completedRequirementPattern = regexp.MustCompile(`(?m)^- \[x\] \x60(MANTA-REQ-[A-Z0-9-]+)\x60`)
+	traceabilityRowPattern      = regexp.MustCompile(`(?m)^\| \x60(MANTA-REQ-[A-Z0-9-]+)\x60 \| ([^|]+) \|$`)
+	testCitationPattern         = regexp.MustCompile(`\x60(Test[A-Za-z0-9_]*)\x60`)
+	nonTestEvidenceRequirements = map[string]bool{
+		"MANTA-REQ-RQDOC-004": true,
+		"MANTA-REQ-RQHAR-007": true,
+	}
+	skippedTestScanDirectories = map[string]bool{
+		".git":                     true,
+		".manta":                   true,
+		".codegraph":               true,
+		".omx":                     true,
+		".omc":                     true,
+		".external-review-sidecar": true,
+		"bin":                      true,
+		"vendor":                   true,
+	}
+)
+
+func repositoryTestFunctions(root string) (map[string]bool, error) {
+	testFunctions := make(map[string]bool)
+	fileSet := token.NewFileSet()
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			if path != root && skippedTestScanDirectories[entry.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(entry.Name(), "_test.go") {
+			return nil
+		}
+		parsed, err := parser.ParseFile(fileSet, path, nil, 0)
+		if err != nil {
+			return fmt.Errorf("parse Go test file %s: %w", path, err)
+		}
+		for _, declaration := range parsed.Decls {
+			function, ok := declaration.(*ast.FuncDecl)
+			if ok && isRunnableGoTest(function) {
+				testFunctions[function.Name.Name] = true
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan repository Go tests: %w", err)
+	}
+	return testFunctions, nil
+}
+
+func isRunnableGoTest(function *ast.FuncDecl) bool {
+	if function.Recv != nil || !isGoTestName(function.Name.Name) {
+		return false
+	}
+	if function.Type.Results != nil && len(function.Type.Results.List) > 0 ||
+		function.Type.Params.List == nil ||
+		len(function.Type.Params.List) != 1 ||
+		len(function.Type.Params.List[0].Names) > 1 {
+		return false
+	}
+	pointer, ok := function.Type.Params.List[0].Type.(*ast.StarExpr)
+	if !ok {
+		return false
+	}
+	if identifier, ok := pointer.X.(*ast.Ident); ok {
+		return identifier.Name == "T"
+	}
+	if selector, ok := pointer.X.(*ast.SelectorExpr); ok {
+		return selector.Sel.Name == "T"
+	}
+	return false
+}
+
+func isGoTestName(name string) bool {
+	if !strings.HasPrefix(name, "Test") {
+		return false
+	}
+	if len(name) == len("Test") {
+		return true
+	}
+	firstRune, _ := utf8.DecodeRuneInString(name[len("Test"):])
+	return !unicode.IsLower(firstRune)
+}
+
+func requirementTraceabilityErrors(specData, matrixData []byte, testFunctions map[string]bool, nonTestExceptions map[string]bool) []string {
 	completed := make(map[string]bool)
-	for _, match := range completedPattern.FindAllSubmatch(specData, -1) {
+	for _, match := range completedRequirementPattern.FindAllSubmatch(specData, -1) {
 		completed[string(match[1])] = true
 	}
 	mapped := make(map[string]bool)
-	for _, match := range rowPattern.FindAllSubmatch(matrixData, -1) {
+	var errors []string
+	for _, match := range traceabilityRowPattern.FindAllSubmatch(matrixData, -1) {
 		id := string(match[1])
 		if mapped[id] {
-			t.Errorf("duplicate traceability row for %s", id)
+			errors = append(errors, fmt.Sprintf("duplicate traceability row for %s", id))
 		}
 		mapped[id] = true
-		if strings.TrimSpace(string(match[2])) == "" {
-			t.Errorf("empty evidence for %s", id)
+		evidence := strings.TrimSpace(string(match[2]))
+		if evidence == "" {
+			errors = append(errors, fmt.Sprintf("empty evidence for %s", id))
+		}
+		citations := testCitationPattern.FindAllStringSubmatch(evidence, -1)
+		isNonTestException := nonTestExceptions[id]
+		if len(citations) == 0 && !isNonTestException {
+			errors = append(errors, fmt.Sprintf("traceability row %s has no cited test and is not an explicit non-test exception", id))
+		}
+		if len(citations) > 0 && isNonTestException {
+			errors = append(errors, fmt.Sprintf("traceability row %s explicit non-test exception now cites a test", id))
+		}
+		for _, citation := range citations {
+			name := citation[1]
+			if !testFunctions[name] {
+				errors = append(errors, fmt.Sprintf("traceability row %s references missing test %s", id, name))
+			}
 		}
 	}
 	for id := range completed {
 		if !mapped[id] {
-			t.Errorf("completed requirement missing from traceability matrix: %s", id)
+			errors = append(errors, fmt.Sprintf("completed requirement missing from traceability matrix: %s", id))
 		}
 	}
 	for id := range mapped {
 		if !completed[id] {
-			t.Errorf("traceability matrix references unknown or incomplete requirement: %s", id)
+			errors = append(errors, fmt.Sprintf("traceability matrix references unknown or incomplete requirement: %s", id))
 		}
 	}
 	if len(completed) != len(mapped) {
-		t.Errorf("traceability count mismatch: completed=%d mapped=%d", len(completed), len(mapped))
+		errors = append(errors, fmt.Sprintf("traceability count mismatch: completed=%d mapped=%d", len(completed), len(mapped)))
 	}
+	for id := range nonTestExceptions {
+		if !mapped[id] {
+			errors = append(errors, fmt.Sprintf("explicit non-test exception has no traceability row: %s", id))
+		}
+	}
+	return errors
 }
 
 func TestBinaryRuleTestDoesNotUseParserFallback(t *testing.T) {

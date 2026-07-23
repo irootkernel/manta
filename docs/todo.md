@@ -1,6 +1,6 @@
 # Manta Todo
 
-Status: 1 open item from the v0.1.4 release-readiness review
+Status: No open implementation items
 Scope: Documentation and implementation follow-up notes
 
 ## Todo status legend
@@ -11,18 +11,11 @@ Scope: Documentation and implementation follow-up notes
 
 ## Release gate
 
-Tag and publish `v0.1.4` only after the items below are closed and the release-readiness review passes again. Until that tag exists, the documented `go install github.com/irootkernel/manta@v0.1.4` command does not resolve: local tags currently stop at `v0.1.3`, and the remote has no tags or releases.
+Tag and publish `v0.1.4` only after the release-readiness review passes again. Until that tag exists, the documented `go install github.com/irootkernel/manta@v0.1.4` command does not resolve: local tags currently stop at `v0.1.3`, and the remote has no tags or releases.
 
-## Open items
+## Active items
 
-Items are listed in recommended fix order. Line references were verified against the current tree and may drift as fixes land.
-
-### RELRV-009 `Open` — Stale AGENTS.md project root; traceability audit does not resolve cited tests
-
-- Severity: docs/test.
-- Problem: (a) `AGENTS.md` records project root `/Users/draccoon/Workspace/SeventeenthEarth/manta`, but the repository lives at `/Users/draccoon/Workspace/SeventeenthEarth/kkachi/kkachi-agent-tester`. (b) The audit regression test only requires each matrix evidence cell to be non-empty text; it never verifies that the cited `Test*` names exist (all 45 currently do, by discipline rather than enforcement), and the `MANTA-REQ-RQWAT-002` row cites a function (`ComputeStatusHash`) instead of a test.
-- Evidence: `AGENTS.md:10`; `e2e/audit_regression_e2e_test.go:39-81`; `docs/requirements-test-matrix.md:56`.
-- Done when: the recorded project root matches the real checkout, and the audit test resolves every cited `Test*` identifier against the codebase, with an explicit rule for non-test evidence rows.
+None.
 
 ## Out-of-scope reminder
 

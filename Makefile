@@ -68,7 +68,7 @@ guardrails:
 	$(GO) test -count=1 ./internal/extract -run '^TestProcessExtractorStatusContract$$'
 	$(GO) test -count=1 ./internal/rules -run '^(TestLoadApplicableFailsOnInvalidDiscoveredFutureParserRule|TestLoadApplicableFailsOnInvalidMatchingRule|TestLoadApplicableRequiresAllRuleTags|TestRuleDetectsOvermatch)$$'
 	$(GO) test -count=1 ./internal/cli -run '^(TestMaterializeArtifactsExtractionErrorContract|TestNoisyRunsWriteBoundedTerminalArtifacts|TestOversizedFailedRunPreservesRawLog|TestOversizedPassingRunUsesBoundedExtraction|TestOversizedSummarizeUsesBoundedExtraction|TestRunAndSummarizeSelectRulesByAllTags|TestSummarizeRebuildsArtifactsFromRawLogOnly|TestRulesLifecycleCommands)$$'
-	$(GO) test -count=1 ./e2e -run '^(TestBinaryTagInterfacesFailBeforeExecution|TestBinaryTagsSelectRulesByAllTags|TestRequirementTraceabilityMatrixCoversCompletedRequirements)$$'
+	$(GO) test -count=1 ./e2e -run '^(TestBinaryTagInterfacesFailBeforeExecution|TestBinaryTagsSelectRulesByAllTags|TestRepositoryTestFunctions|TestRequirementTraceabilityAuditRejectsInvalidEvidence|TestRequirementTraceabilityMatrixCoversCompletedRequirements)$$'
 
 unit-test:
 	$(GO) test -count=1 $(UNIT_PACKAGES)

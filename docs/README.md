@@ -27,9 +27,9 @@ For Manta maintainers:
 
 ## Current delivery state
 
-The standalone v0.1 baseline, the recorded `HARDE-001` through `HARDE-007` hardening requirements, the schema-v2 canonical tag selector contract, and release-readiness follow-up `RELRV-001` through `RELRV-008` are implemented. The current supported surfaces include configured and ad-hoc command execution, raw-log summarization, excerpt lookup, five parsers, rule lifecycle commands, bounded/redacted derived evidence with explicit record truncation, collision-free standalone artifacts, fixed run-scoped artifacts, and deterministic status JSON. All `.manta/` content is local-only state.
+The standalone v0.1 baseline, the recorded `HARDE-001` through `HARDE-007` hardening requirements, the schema-v2 canonical tag selector contract, and release-readiness follow-up `RELRV-001` through `RELRV-009` are implemented. The current supported surfaces include configured and ad-hoc command execution, raw-log summarization, excerpt lookup, five parsers, rule lifecycle commands, bounded/redacted derived evidence with explicit record truncation, collision-free standalone artifacts, fixed run-scoped artifacts, and deterministic status JSON. All `.manta/` content is local-only state.
 
-The remaining open item from the v0.1.4 release-readiness review is recorded in `todo.md`. The delivery statement above is intentionally narrower than “Manta provides every testing or orchestration capability.” Features listed as unsupported or out of scope in the [integration guide](integration-guide.md#not-provided-by-manta-v01) are not implicitly planned or promised.
+There are currently no open implementation items in `todo.md`. The delivery statement above is intentionally narrower than “Manta provides every testing or orchestration capability.” Features listed as unsupported or out of scope in the [integration guide](integration-guide.md#not-provided-by-manta-v01) are not implicitly planned or promised.
 
 ## Document catalog
 
@@ -44,7 +44,7 @@ The remaining open item from the v0.1.4 release-readiness review is recorded in 
 | [Requirements-to-test matrix](requirements-test-matrix.md) | Maintainers and auditors | Primary evidence for each completed requirement |
 | [Implementation note](implementation-note.md) | Contributors | Package boundaries, risk areas, tests, release checklist |
 | [Roadmap](roadmap.md) | Project maintainers | Completed delivery history and integration-contract tasks |
-| [Todo](todo.md) | Project maintainers | Explicitly accepted open work; currently the v0.1.4 release-readiness items |
+| [Todo](todo.md) | Project maintainers | Explicitly accepted open work; currently empty |
 
 ## Source-of-truth order
 
