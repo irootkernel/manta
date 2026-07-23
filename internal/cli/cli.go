@@ -55,7 +55,7 @@ const (
 )
 
 func Main(args []string, stdout, stderr io.Writer) int {
-	return Run(args, stdout, stderr, NewBuildInfo("manta", "0.1.4", "unknown", "unknown"))
+	return Run(args, stdout, stderr, NewBuildInfo("manta", "0.1.5", "unknown", "unknown"))
 }
 
 func Run(args []string, stdout, stderr io.Writer, info BuildInfo) int {

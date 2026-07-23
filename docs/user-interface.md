@@ -99,7 +99,7 @@ Versioned selection uses local metadata such as:
 ```yaml
 schema_version: "manta.toolchain.v1"
 manta:
-  cli_version: "0.1.4"
+  cli_version: "0.1.5"
 ```
 
 An absolute override may be recorded with an optional version assertion:
@@ -107,7 +107,7 @@ An absolute override may be recorded with an optional version assertion:
 ```yaml
 schema_version: "manta.toolchain.v1"
 manta:
-  cli_version: "0.1.4"
+  cli_version: "0.1.5"
   binary_path: "/absolute/path/to/manta"
 ```
 

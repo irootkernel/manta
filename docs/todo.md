@@ -11,7 +11,7 @@ Scope: Documentation and implementation follow-up notes
 
 ## Release gate
 
-Tag and publish `v0.1.4` only after the release-readiness review passes again. Until that tag exists, the documented `go install github.com/irootkernel/manta@v0.1.4` command does not resolve: local tags currently stop at `v0.1.3`, and the remote has no tags or releases.
+Tag and publish `v0.1.5` only from a clean commit after the release-readiness checklist passes. Version `v0.1.4` was not published and is intentionally skipped.
 
 ## Active items
 

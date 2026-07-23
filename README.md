@@ -16,7 +16,7 @@ Manta never changes a command result: a failing test command remains failed even
 Install the current release with Go:
 
 ```bash
-go install github.com/irootkernel/manta@v0.1.4
+go install github.com/irootkernel/manta@v0.1.5
 manta --version
 ```
 
@@ -26,10 +26,10 @@ From a source checkout, use:
 make install
 ```
 
-Projects that pin a local Manta toolchain can install the versioned binary at `~/.local/manta/toolchains/v0.1.4/bin/`:
+Projects that pin a local Manta toolchain can install the versioned binary at `~/.local/manta/toolchains/v0.1.5/bin/`:
 
 ```bash
-VERSION=0.1.4 make install-toolchain
+VERSION=0.1.5 make install-toolchain
 ```
 
 ## Try it in five minutes

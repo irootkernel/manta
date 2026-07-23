@@ -1,6 +1,6 @@
 # Manta Parent-Project Integration Guide
 
-Status: Current for `manta v0.1.4`
+Status: Current for `manta v0.1.5`
 Audience: Projects that invoke Manta or consume Manta evidence
 
 Manta is a standalone deterministic test runner and evidence producer. A parent project owns when and why tests run; Manta owns command execution, raw-log preservation, bounded extraction, and factual artifacts for that one invocation.
@@ -24,7 +24,7 @@ The command exit code is authoritative. Parsers and rules describe evidence qual
 
 ## Supported capability matrix
 
-| Area | Supported in v0.1.4 | Integration note |
+| Area | Supported in v0.1.5 | Integration note |
 |---|---|---|
 | Configured execution | Yes | `run <command-id>` reads `.manta/tester.yaml`. |
 | Ad-hoc execution | Yes | `run --tag <tag> [--tag <tag> ...] -- <argv...>` can run without configured commands. |
@@ -74,7 +74,7 @@ Projects that need shared automation must generate or provision their local Mant
 For ordinary local use, install and verify the pinned release:
 
 ```bash
-go install github.com/irootkernel/manta@v0.1.4
+go install github.com/irootkernel/manta@v0.1.5
 manta --version
 ```
 
@@ -89,7 +89,7 @@ Example portable version selection:
 ```yaml
 schema_version: "manta.toolchain.v1"
 manta:
-  cli_version: "0.1.4"
+  cli_version: "0.1.5"
 ```
 
 Validate selection before invoking Manta:

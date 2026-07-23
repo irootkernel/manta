@@ -1,6 +1,6 @@
 # Manta Documentation
 
-Status: Current for `manta v0.1.4`
+Status: Current for `manta v0.1.5`
 
 This directory contains Manta's integration contracts, technical design, delivery history, and maintainer guidance. Start with the document that matches your role instead of reading the directory in filename order.
 
@@ -24,6 +24,7 @@ For Manta maintainers:
 3. Use the [requirements-to-test matrix](requirements-test-matrix.md) to find executable evidence.
 4. Read the [implementation note](implementation-note.md) before changing runner, parser, artifact, redaction, or rule behavior.
 5. Use the [roadmap](roadmap.md) and [todo](todo.md) for recorded delivery and open-work state.
+6. Use the [v0.1.5 release notes](releases/v0.1.5.md) when publishing the GitHub Release.
 
 ## Current delivery state
 
@@ -45,6 +46,7 @@ There are currently no open implementation items in `todo.md`. The delivery stat
 | [Implementation note](implementation-note.md) | Contributors | Package boundaries, risk areas, tests, release checklist |
 | [Roadmap](roadmap.md) | Project maintainers | Completed delivery history and integration-contract tasks |
 | [Todo](todo.md) | Project maintainers | Explicitly accepted open work; currently empty |
+| [v0.1.5 release notes](releases/v0.1.5.md) | Users and maintainers | Published changes, compatibility notes, and known limitations |
 
 ## Source-of-truth order
 

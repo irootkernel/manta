@@ -6,7 +6,7 @@ Manta is a standalone deterministic Go CLI for running test commands, preserving
 
 Current local-dev baseline:
 
-- Manta: `manta 0.1.4`
+- Manta: `manta 0.1.5`
 - Project root: `/Users/draccoon/Workspace/SeventeenthEarth/kkachi/kkachi-agent-tester`
 - Manta standalone evidence: `.manta/`
 
@@ -108,7 +108,7 @@ Before reporting completion, include changed files, commands run, command exits,
 
 ## 8. Reporting
 
-Use English for code, docs, tests, commit messages, and run artifacts. Use Korean for direct 주군-facing status reports unless requested otherwise.
+Use English for code, docs, tests, commit messages, and run artifacts. Use Korean for direct user-facing status reports unless requested otherwise.
 
 Keep chat reports compact. Put detailed logs, evidence paths, and raw snippets in artifacts or explicit summaries rather than flooding chat. Distinguish:
 
