@@ -170,6 +170,8 @@ command_argv:
   - vitest
   - run
 exit_code: 1
+started_at: 2026-06-24T01:01:44.578Z
+ended_at: 2026-06-24T01:02:03Z
 duration_ms: 18422
 raw_log: .manta/runs/standalone/20260624T010203/unit.raw.log
 raw_log_sha256: sha256:...
@@ -225,6 +227,7 @@ failure_signatures:
 warning_signatures:
   - sha256:...
 updated_at: 2026-06-24T01:02:03Z
+status_hash: sha256:...
 ```
 
 ### Watcher hash input set

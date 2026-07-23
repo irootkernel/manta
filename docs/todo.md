@@ -1,6 +1,6 @@
 # Manta Todo
 
-Status: 2 open items from the v0.1.4 release-readiness review
+Status: 1 open item from the v0.1.4 release-readiness review
 Scope: Documentation and implementation follow-up notes
 
 ## Todo status legend
@@ -16,13 +16,6 @@ Tag and publish `v0.1.4` only after the items below are closed and the release-r
 ## Open items
 
 Items are listed in recommended fix order. Line references were verified against the current tree and may drift as fixes land.
-
-### RELRV-008 `Open` — Architecture JSON contract examples omit real fields
-
-- Severity: docs.
-- Problem: the Summary and Status JSON contract examples omit fields the binary always writes: `started_at` and `ended_at` in summary JSON, and `status_hash` in status JSON (`status_hash` is discussed in ADR-0005 and the integration guide but missing from the architecture contract example).
-- Evidence: `docs/architecture.md:155-239`; `internal/model/types.go:169-170,194-195`.
-- Done when: both contract examples list every field a fresh run actually produces, cross-checked against generated artifacts.
 
 ### RELRV-009 `Open` — Stale AGENTS.md project root; traceability audit does not resolve cited tests
 

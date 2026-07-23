@@ -27,9 +27,9 @@ This matrix records the primary evidence for every requirement marked complete. 
 | `MANTA-REQ-RQRUN-006` | `TestExecuteForwardsTerminationAndNormalizesResult`; `TestExecuteInterruptedReportsRawLogWriteFailure`; `TestBinaryPreservesInterruptedEvidence` |
 | `MANTA-REQ-RQART-001` | `TestRunIDArtifactLayout`; `TestBinaryArtifactContainment` |
 | `MANTA-REQ-RQART-002` | `TestArtifactOutputDirectories`; `TestBinaryStandaloneCollisionResistance` |
-| `MANTA-REQ-RQART-003` | `TestConfiguredRunAndExcerpt`; `TestOversizedSummarizeUsesBoundedExtraction`; `TestNoisyRunsWriteBoundedTerminalArtifacts`; `TestWriteSummaryJSONIncludesFalseTruncationFields` |
+| `MANTA-REQ-RQART-003` | `TestConfiguredRunAndExcerpt`; `TestOversizedSummarizeUsesBoundedExtraction`; `TestNoisyRunsWriteBoundedTerminalArtifacts`; `TestWriteSummaryJSONIncludesFalseTruncationFields`; `TestArchitectureJSONContractExamplesMatchFreshRunArtifacts` |
 | `MANTA-REQ-RQART-004` | `TestWriteSummaryMarkdownMatchesDocumentedShape`; `TestDocumentedCLIWorkflowAgainstFreshFixture` |
-| `MANTA-REQ-RQART-005` | `TestConfiguredRunAndExcerpt`; `TestBinaryJSONRedactsCommandMetadata` |
+| `MANTA-REQ-RQART-005` | `TestConfiguredRunAndExcerpt`; `TestBinaryJSONRedactsCommandMetadata`; `TestArchitectureJSONContractExamplesMatchFreshRunArtifacts` |
 | `MANTA-REQ-RQART-006` | `TestConfiguredRunAndExcerpt`; `TestExcerptSymlinkContainment` |
 | `MANTA-REQ-RQART-007` | `TestArtifactOutputDirectories`; `TestRunIDArtifactLayout` |
 | `MANTA-REQ-RQEXT-001` | `TestProcessGenericFailureProducesPreciseSpan` |
@@ -55,7 +55,7 @@ This matrix records the primary evidence for every requirement marked complete. 
 | `MANTA-REQ-RQWAT-001` | `TestConfiguredRunAndExcerpt`; `TestRawLogWriteFailureDoesNotPublishDerivedArtifacts`; status-hash assertions in CLI and binary tests; `TestNoisyRunsWriteBoundedTerminalArtifacts` |
 | `MANTA-REQ-RQWAT-002` | `ComputeStatusHash`; status-hash assertions in CLI and binary tests |
 | `MANTA-REQ-RQWAT-003` | `TestBinaryJSONRedactsCommandMetadata`; `TestDocumentedCLIWorkflowAgainstFreshFixture` |
-| `MANTA-REQ-RQDOC-001` | authoritative documents listed in `AGENTS.md` and `README.md` |
+| `MANTA-REQ-RQDOC-001` | authoritative documents listed in `AGENTS.md` and `README.md`; `TestArchitectureJSONContractExamplesMatchFreshRunArtifacts` |
 | `MANTA-REQ-RQDOC-002` | `TestDocumentedCLIWorkflowAgainstFreshFixture` |
 | `MANTA-REQ-RQDOC-003` | parser fixtures under `internal/extract/testdata`; `TestTestRuleMatchesExpectedSpan`; `TestDocumentedCLIWorkflowAgainstFreshFixture` |
 | `MANTA-REQ-RQDOC-004` | release-readiness checklist in `implementation-note.md`; `make test` |

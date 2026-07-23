@@ -2,13 +2,44 @@ package e2e
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
+
+func TestArchitectureJSONContractExamplesMatchFreshRunArtifacts(t *testing.T) {
+	root := projectRoot(t)
+	bin := buildBinary(t, root)
+	repo := t.TempDir()
+	writeE2EConfig(t, repo, "#!/bin/sh\necho ok\n")
+
+	result := runBinaryJSON(t, bin, repo, "run", "unit")
+	statusData, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(result.StatusJSON)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var statusReference struct {
+		SummaryPath string `json:"summary_path"`
+	}
+	if err := json.Unmarshal(statusData, &statusReference); err != nil {
+		t.Fatal(err)
+	}
+	summaryData, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(statusReference.SummaryPath)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	architecture := readDocumentation(t, filepath.Join(root, "docs", "architecture.md"))
+	assertDocumentedJSONFields(t, "summary", markdownCodeBlockAfter(t, architecture, "## Summary JSON contract", "yaml"), summaryData)
+	assertDocumentedJSONFields(t, "status", markdownCodeBlockAfter(t, architecture, "## Status JSON contract", "yaml"), statusData)
+}
 
 func TestDocumentedCLIWorkflowAgainstFreshFixture(t *testing.T) {
 	root := projectRoot(t)
@@ -256,6 +287,23 @@ func markdownCodeBlocks(t *testing.T, document, language string) []string {
 		}
 		blocks = append(blocks, document[:end])
 		document = document[end+len("```\n"):]
+	}
+}
+
+func assertDocumentedJSONFields(t *testing.T, name, contract string, artifact []byte) {
+	t.Helper()
+	var documented map[string]yaml.Node
+	if err := yaml.Unmarshal([]byte(contract), &documented); err != nil {
+		t.Fatalf("decode documented %s contract: %v", name, err)
+	}
+	var generated map[string]json.RawMessage
+	if err := json.Unmarshal(artifact, &generated); err != nil {
+		t.Fatalf("decode generated %s artifact: %v", name, err)
+	}
+	want := slices.Sorted(maps.Keys(documented))
+	got := slices.Sorted(maps.Keys(generated))
+	if !slices.Equal(got, want) {
+		t.Fatalf("%s contract fields differ: got=%q want=%q", name, got, want)
 	}
 }
 
