@@ -1,6 +1,6 @@
 # Manta User Interface
 
-Status: Complete through `HARDE-007`, `TAGS-001`, and `RELRV-007`
+Status: Complete through `HARDE-007`, `TAGS-001`, and `RELRV-009`
 Scope: CLI-first interface for Manta v0.1, including schema-v2 tag selectors and release-readiness follow-up
 
 This is the complete command reference. First-time users should begin with the repository [README](../README.md); parent-project owners should use the [integration guide](integration-guide.md) for ownership boundaries and adoption steps.

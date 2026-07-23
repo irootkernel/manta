@@ -94,7 +94,7 @@ Extraction internal errors follow the artifact/CLI matrix in `architecture.md`. 
 
 For execution and summarize logs larger than 256 KiB, extraction uses the final 256 KiB beginning at the first complete line. It preserves absolute line and byte offsets into the full raw log and always reports `degraded`, including when the retained tail contains a precise match. An oversized unbroken line has no complete tail line to inspect. Rule-only `rules test` extraction remains fail closed above 256 KiB so overmatch validation is never based on a partial fixture.
 
-After redaction and noise filtering, retain deterministic prefixes of at most 50 failures and 50 warnings. Assign excerpt references before measuring the rendered formats, then retain the largest failure prefix that fits within 64 KiB in both summary JSON and Markdown before using the remaining budget for the largest warning prefix. Counts always equal retained array lengths, truncation degrades evidence quality, and excerpt files are written only for retained failures. Keep the writer size checks as fail-closed guards for non-evidence metadata overflow.
+After redaction and noise filtering, retain deterministic prefixes of at most 50 failures and 50 warnings. Assign excerpt references before measuring the rendered formats, then retain the largest failure prefix that keeps both summary files within 64 KiB, including the final JSON newline, before using the remaining budget for the largest warning prefix. Counts always equal retained array lengths, truncation degrades evidence quality, and excerpt files are written only for retained failures. Keep the writer size checks as fail-closed guards for non-evidence metadata overflow.
 
 ## Fixture-backed parser examples
 

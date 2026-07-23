@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -210,6 +211,27 @@ func TestTwoArguments(t *testing.T, value string) {}
 func TestValueArgument(t testing.T) {}
 func (suite) TestMethod(t *testing.T) {}
 `)
+		writeAuditGoFixture(t, root, "aliased_test.go", `package fixture
+
+import testpkg "testing"
+
+func TestAliased(t *testpkg.T) {}
+`)
+		writeAuditGoFixture(t, root, "false_positives_test.go", `package fixture
+
+import custom "example.com/custom"
+
+type T struct{}
+
+func TestLocalType(t *T) {}
+func TestForeignType(t *custom.T) {}
+`)
+		writeAuditGoFixture(t, root, "misleading_alias_test.go", `package fixture
+
+import testing "example.com/custom"
+
+func TestMisleadingAlias(t *testing.T) {}
+`)
 		writeAuditGoFixture(t, root, "production.go", `package fixture
 
 import "testing"
@@ -230,8 +252,8 @@ func TestIgnored(t *testing.T) {}
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(functions) != 1 || !functions["TestValid"] {
-			t.Fatalf("expected only TestValid, got %v", functions)
+		if len(functions) != 2 || !functions["TestValid"] || !functions["TestAliased"] {
+			t.Fatalf("expected TestValid and TestAliased, got %v", functions)
 		}
 	})
 
@@ -295,9 +317,13 @@ func repositoryTestFunctions(root string) (map[string]bool, error) {
 		if err != nil {
 			return fmt.Errorf("parse Go test file %s: %w", path, err)
 		}
+		testingQualifier := testingPackageQualifier(parsed)
+		if testingQualifier == "" {
+			return nil
+		}
 		for _, declaration := range parsed.Decls {
 			function, ok := declaration.(*ast.FuncDecl)
-			if ok && isRunnableGoTest(function) {
+			if ok && isRunnableGoTest(function, testingQualifier) {
 				testFunctions[function.Name.Name] = true
 			}
 		}
@@ -309,7 +335,23 @@ func repositoryTestFunctions(root string) (map[string]bool, error) {
 	return testFunctions, nil
 }
 
-func isRunnableGoTest(function *ast.FuncDecl) bool {
+func testingPackageQualifier(file *ast.File) string {
+	for _, importSpec := range file.Imports {
+		importPath, err := strconv.Unquote(importSpec.Path.Value)
+		if err != nil || importPath != "testing" {
+			continue
+		}
+		if importSpec.Name == nil {
+			return "testing"
+		}
+		if importSpec.Name.Name != "." && importSpec.Name.Name != "_" {
+			return importSpec.Name.Name
+		}
+	}
+	return ""
+}
+
+func isRunnableGoTest(function *ast.FuncDecl, testingQualifier string) bool {
 	if function.Recv != nil || !isGoTestName(function.Name.Name) {
 		return false
 	}
@@ -323,11 +365,9 @@ func isRunnableGoTest(function *ast.FuncDecl) bool {
 	if !ok {
 		return false
 	}
-	if identifier, ok := pointer.X.(*ast.Ident); ok {
-		return identifier.Name == "T"
-	}
 	if selector, ok := pointer.X.(*ast.SelectorExpr); ok {
-		return selector.Sel.Name == "T"
+		qualifier, ok := selector.X.(*ast.Ident)
+		return ok && qualifier.Name == testingQualifier && selector.Sel.Name == "T"
 	}
 	return false
 }

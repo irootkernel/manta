@@ -1,6 +1,6 @@
 # Manta Architecture
 
-Status: Complete through `HARDE-007`, `TAGS-001`, and `RELRV-007`
+Status: Complete through `HARDE-007`, `TAGS-001`, and `RELRV-009`
 Scope: Standalone Manta v0.1 architecture, including schema-v2 tag selectors and release-readiness follow-up
 
 This document defines Manta's technical and artifact contracts. See the [integration guide](integration-guide.md) for parent-project ownership, supported capability status, and rollout guidance.
@@ -204,7 +204,7 @@ warnings:
       end_line: 718
 ```
 
-`failure_count` and `warning_count` are the lengths of the retained arrays. After redaction and noise filtering, Manta keeps the first 50 records of each kind. If either rendered summary would exceed 64 KiB, Manta retains the largest fitting failure prefix first and uses the remaining budget for the largest warning prefix. The corresponding truncation field becomes `true`, `extractor_status` becomes `degraded`, and only retained failures receive excerpt files. A truncation field of `false` means no records of that kind were omitted by these summary budgets.
+`failure_count` and `warning_count` are the lengths of the retained arrays. After redaction and noise filtering, Manta keeps the first 50 records of each kind. If either rendered summary file would exceed 64 KiB, including the final JSON newline, Manta retains the largest fitting failure prefix first and uses the remaining budget for the largest warning prefix. The corresponding truncation field becomes `true`, `extractor_status` becomes `degraded`, and only retained failures receive excerpt files. A truncation field of `false` means no records of that kind were omitted by these summary budgets.
 
 ## Status JSON contract
 

@@ -123,10 +123,10 @@ func WriteSummaryJSON(paths model.ArtifactPaths, summary model.Summary) (string,
 	if err != nil {
 		return "", model.NewMantaError(model.ExitCodeArtifactError, "marshal summary json", err)
 	}
-	if len(data) > safety.MaxSummaryBytes {
+	written := append(data, '\n')
+	if len(written) > safety.MaxSummaryBytes {
 		return "", model.NewMantaError(model.ExitCodeArtifactError, "write summary json", fmt.Errorf("summary json exceeds %d bytes", safety.MaxSummaryBytes))
 	}
-	written := append(data, '\n')
 	if err := writeArtifact(paths, paths.SummaryJSON, written, "write summary json"); err != nil {
 		return "", err
 	}
@@ -174,7 +174,7 @@ func BoundSummaryEvidence(summary model.Summary) (model.Summary, error) {
 		if err != nil {
 			return false, model.NewMantaError(model.ExitCodeArtifactError, "marshal summary json", err)
 		}
-		return len(jsonData) <= safety.MaxSummaryBytes && len(renderSummaryMarkdown(bounded)) <= safety.MaxSummaryBytes, nil
+		return len(jsonData)+1 <= safety.MaxSummaryBytes && len(renderSummaryMarkdown(bounded)) <= safety.MaxSummaryBytes, nil
 	}
 	allEvidence := candidate(len(failures), len(warnings))
 	allFits, err := fits(allEvidence)

@@ -274,7 +274,7 @@ func TestBoundSummaryEvidenceUsesRenderedByteBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	markdown := renderSummaryMarkdown(bounded)
-	if len(jsonData) > safety.MaxSummaryBytes || len(markdown) > safety.MaxSummaryBytes {
+	if len(jsonData)+1 > safety.MaxSummaryBytes || len(markdown) > safety.MaxSummaryBytes {
 		t.Fatalf("bounded artifacts exceed limit: json=%d markdown=%d", len(jsonData), len(markdown))
 	}
 	if bounded.FailureCount != 1 || bounded.WarningCount != 0 || !bounded.FailuresTruncated || !bounded.WarningsTruncated {
@@ -282,6 +282,57 @@ func TestBoundSummaryEvidenceUsesRenderedByteBudget(t *testing.T) {
 	}
 	if bounded.Failures[0].ID != "F001" {
 		t.Fatalf("expected first failure to be retained, got %+v", bounded.Failures)
+	}
+}
+
+func TestBoundSummaryEvidenceIncludesJSONTrailingNewlineInByteBudget(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	paths := model.ArtifactPaths{BoundaryDir: dir, SummaryJSON: filepath.Join(dir, "summary.json")}
+	summary := model.Summary{
+		Status:          model.RunStatusFailed,
+		CommandID:       "unit",
+		ExtractorStatus: model.ExtractorStatusPrecise,
+		RawLog:          ".manta/unit.raw.log",
+		Failures: []model.Failure{
+			{ID: "F001", Signature: "short"},
+			{ID: "F002"},
+		},
+	}
+	syncSummaryEvidenceMetadata(&summary)
+	jsonData, err := marshalSummaryJSON(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	padding := safety.MaxSummaryBytes - len(jsonData)
+	if padding <= 0 {
+		t.Fatalf("summary metadata leaves no boundary-test padding: %d", padding)
+	}
+	summary.Failures[1].Signature = strings.Repeat("x", padding)
+	jsonData, err = marshalSummaryJSON(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(jsonData) != safety.MaxSummaryBytes {
+		t.Fatalf("test summary JSON size=%d, want %d before trailing newline", len(jsonData), safety.MaxSummaryBytes)
+	}
+
+	bounded, err := BoundSummaryEvidence(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bounded.FailureCount != 1 || !bounded.FailuresTruncated || bounded.Failures[0].ID != "F001" {
+		t.Fatalf("expected boundary evidence to drop F002, got %+v", bounded)
+	}
+	if _, err := WriteSummaryJSON(paths, bounded); err != nil {
+		t.Fatal(err)
+	}
+	written, err := os.ReadFile(paths.SummaryJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(written) > safety.MaxSummaryBytes {
+		t.Fatalf("written summary JSON size=%d, limit=%d", len(written), safety.MaxSummaryBytes)
 	}
 }
 

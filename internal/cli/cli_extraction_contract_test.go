@@ -251,8 +251,8 @@ func TestNoisyRunsWriteBoundedTerminalArtifacts(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(summaryData)-1 > safety.MaxSummaryBytes || len(markdown) > safety.MaxSummaryBytes {
-				t.Fatalf("summary artifacts exceed limit: json=%d markdown=%d", len(summaryData)-1, len(markdown))
+			if len(summaryData) > safety.MaxSummaryBytes || len(markdown) > safety.MaxSummaryBytes {
+				t.Fatalf("summary artifacts exceed limit: json=%d markdown=%d", len(summaryData), len(markdown))
 			}
 			for _, want := range []string{
 				fmt.Sprintf("Failures: %d (truncated: %t)", tt.wantFailures, tt.failuresTruncated),
