@@ -1,6 +1,6 @@
 # Manta Todo
 
-Status: 3 open items from the v0.1.4 release-readiness review
+Status: 2 open items from the v0.1.4 release-readiness review
 Scope: Documentation and implementation follow-up notes
 
 ## Todo status legend
@@ -16,13 +16,6 @@ Tag and publish `v0.1.4` only after the items below are closed and the release-r
 ## Open items
 
 Items are listed in recommended fix order. Line references were verified against the current tree and may drift as fixes land.
-
-### RELRV-007 `Open` — Fix the fixture-backed vitest rule example in the implementation note
-
-- Severity: docs (empirically reproduced).
-- Problem: the documented rule `vitest-empty-state-v1` claims to match `internal/extract/testdata/vitest.raw.log` lines `7:9`, but that fixture's FAIL header starts with a leading space and the example's `^FAIL  ...$` start regex tolerates none, so the documented `rules test` invocation reports "produced no failures" and exits `4`.
-- Evidence: `docs/implementation-note.md:110-142`; `internal/extract/testdata/vitest.raw.log:7`.
-- Done when: the example matches its cited fixture (for example `^\s*FAIL\s+...`) and the documented `rules test` command has been re-run successfully against it.
 
 ### RELRV-008 `Open` — Architecture JSON contract examples omit real fields
 

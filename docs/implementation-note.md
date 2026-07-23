@@ -1,6 +1,6 @@
 # Manta Implementation Note
 
-Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, `TAGS-001`, and `RELRV-001` through `RELRV-005` complete
+Status: v0.1 baseline, `HARDE-001` through `HARDE-007`, `TAGS-001`, and `RELRV-001` through `RELRV-007` complete
 Scope: Maintainer guidance for the standalone Manta v0.1 implementation, schema-v2 tags, release-readiness follow-up, and future changes
 
 This document explains implementation constraints and verification expectations for contributors. It is not the parent-project adoption contract; integrators should start with the [integration guide](integration-guide.md).
@@ -129,7 +129,7 @@ provenance:
   reason: "Capture the Vitest FAIL block for renders empty state"
 match:
   start:
-    regex: "^FAIL  src/foo\\.test\\.ts > renders empty state$"
+    regex: "^\\s*FAIL\\s+src/foo\\.test\\.ts > renders empty state$"
   end:
     any_of:
       - regex: "^$"
@@ -140,10 +140,10 @@ match:
 extract:
   file_line:
     regex: "(?P<file>[^\\s:]+\\.[A-Za-z0-9]+):(?P<line>\\d+)"
-  test_name:
-    regex: "^\\s*[×✗-]\\s+(?P<test>.+)$"
 confidence: medium
 ```
+
+`source_span` records the core observed lines `7:9`. For `rules test`, the match runs through the blank line at `14`, and the configured context expands the extracted span to `6:15`.
 
 Validation rejects unknown YAML fields, extra YAML documents, missing IDs or provenance, duplicate IDs, negative or oversized context, a combined matched-block/context budget above 160 lines, excessive `max_block_lines`, invalid capture groups, invalid or unsupported regex, inconsistent active/disabled deletion reasons, and rule overmatch during rule-only `rules test` extraction. Config, stored rule, and imported rule YAML are limited to 256 KiB before decoding.
 

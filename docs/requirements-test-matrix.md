@@ -43,7 +43,7 @@ This matrix records the primary evidence for every requirement marked complete. 
 | `MANTA-REQ-RQRUL-002` | `TestCreateSearchAndDeleteRule`; `TestRulesLifecycleCommands` |
 | `MANTA-REQ-RQRUL-003` | `TestValidateStoredRuleRejectsInvalidContextAndStatus`; `TestCreateSearchAndDeleteRule` |
 | `MANTA-REQ-RQRUL-004` | `TestCreateSearchAndDeleteRule`; `TestRulesLifecycleCommands` |
-| `MANTA-REQ-RQRUL-005` | `TestTestRuleMatchesExpectedSpan`; `TestRuleMatchesCRLFLineEndings` |
+| `MANTA-REQ-RQRUL-005` | `TestTestRuleMatchesExpectedSpan`; `TestRuleMatchesCRLFLineEndings`; `TestDocumentedCLIWorkflowAgainstFreshFixture` |
 | `MANTA-REQ-RQRUL-006` | `TestRuleDetectsOvermatch`; `TestProcessRulesRejectsInvalidRegex`; `TestBinaryRejectsOversizedRuleContext` |
 | `MANTA-REQ-RQRUL-007` | `TestProposeWritesRunLocalProposal`; `TestProposePreservesMeaningfulLineWhitespace` |
 | `MANTA-REQ-RQRUL-008` | `TestLoadApplicableRequiresAllRuleTags`; `TestRunAndSummarizeSelectRulesByAllTags`; `TestBinaryTagsSelectRulesByAllTags` |
@@ -57,7 +57,7 @@ This matrix records the primary evidence for every requirement marked complete. 
 | `MANTA-REQ-RQWAT-003` | `TestBinaryJSONRedactsCommandMetadata`; `TestDocumentedCLIWorkflowAgainstFreshFixture` |
 | `MANTA-REQ-RQDOC-001` | authoritative documents listed in `AGENTS.md` and `README.md` |
 | `MANTA-REQ-RQDOC-002` | `TestDocumentedCLIWorkflowAgainstFreshFixture` |
-| `MANTA-REQ-RQDOC-003` | parser fixtures under `internal/extract/testdata`; `TestTestRuleMatchesExpectedSpan` |
+| `MANTA-REQ-RQDOC-003` | parser fixtures under `internal/extract/testdata`; `TestTestRuleMatchesExpectedSpan`; `TestDocumentedCLIWorkflowAgainstFreshFixture` |
 | `MANTA-REQ-RQDOC-004` | release-readiness checklist in `implementation-note.md`; `make test` |
 | `MANTA-REQ-RQHAR-001` | `TestBinaryArtifactContainment`; path, artifact, and rule symlink tests |
 | `MANTA-REQ-RQHAR-002` | `TestBinaryPreservesInterruptedEvidence`; `TestExecuteInterruptedReportsRawLogWriteFailure`; Unix runner signal tests |

@@ -117,6 +117,15 @@ func TestDocumentedCLIWorkflowAgainstFreshFixture(t *testing.T) {
 		}
 	}
 
+	implementationNote := readDocumentation(t, filepath.Join(root, "docs", "implementation-note.md"))
+	vitestRulePath := filepath.Join(repo, "vitest-empty-state-v1.yaml")
+	if err := os.WriteFile(vitestRulePath, []byte(markdownCodeBlockAfter(t, implementationNote, "Fixture-backed example using the Vitest log", "yaml")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runDocumentedCommand(t, bin, repo, 0, "rules", "create", "--file", vitestRulePath)
+	runDocumentedCommand(t, bin, repo, 0, "rules", "test", "--rule", "vitest-empty-state-v1", "--log",
+		filepath.Join(root, "internal", "extract", "testdata", "vitest.raw.log"), "--expect-span", "6:15")
+
 	readme := readDocumentation(t, filepath.Join(root, "README.md"))
 	integrationGuide := readDocumentation(t, filepath.Join(root, "docs", "integration-guide.md"))
 	documentationIndex := readDocumentation(t, filepath.Join(root, "docs", "README.md"))

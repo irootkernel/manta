@@ -27,9 +27,9 @@ For Manta maintainers:
 
 ## Current delivery state
 
-The standalone v0.1 baseline, the recorded `HARDE-001` through `HARDE-007` hardening requirements, the schema-v2 canonical tag selector contract, and release-readiness follow-up `RELRV-001` through `RELRV-006` are implemented. The current supported surfaces include configured and ad-hoc command execution, raw-log summarization, excerpt lookup, five parsers, rule lifecycle commands, bounded/redacted derived evidence with explicit record truncation, collision-free standalone artifacts, fixed run-scoped artifacts, and deterministic status JSON. All `.manta/` content is local-only state.
+The standalone v0.1 baseline, the recorded `HARDE-001` through `HARDE-007` hardening requirements, the schema-v2 canonical tag selector contract, and release-readiness follow-up `RELRV-001` through `RELRV-007` are implemented. The current supported surfaces include configured and ad-hoc command execution, raw-log summarization, excerpt lookup, five parsers, rule lifecycle commands, bounded/redacted derived evidence with explicit record truncation, collision-free standalone artifacts, fixed run-scoped artifacts, and deterministic status JSON. All `.manta/` content is local-only state.
 
-The remaining three open items from the v0.1.4 release-readiness review are recorded in `todo.md`. The delivery statement above is intentionally narrower than “Manta provides every testing or orchestration capability.” Features listed as unsupported or out of scope in the [integration guide](integration-guide.md#not-provided-by-manta-v01) are not implicitly planned or promised.
+The remaining two open items from the v0.1.4 release-readiness review are recorded in `todo.md`. The delivery statement above is intentionally narrower than “Manta provides every testing or orchestration capability.” Features listed as unsupported or out of scope in the [integration guide](integration-guide.md#not-provided-by-manta-v01) are not implicitly planned or promised.
 
 ## Document catalog
 
